@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+  /* Mobile-friendly tweaks on top of Bootstrap */
+  body { padding-left: 0; padding-right: 0; }
+  table { max-width: 100%; }
+  .table-responsive-wrap { overflow-x: auto; }
+  img { max-width: 100%; height: auto; }
+  @media (max-width: 576px) {
+    h1 { font-size: 1.5rem; }
+    h2 { font-size: 1.25rem; }
+    .payment-option { width: 100% !important; }
+    .form-group input, .form-group select { width: 100% !important; box-sizing: border-box; }
+  }
+</style>
+<meta charset="UTF-8">
+<title>Insert title here</title>
+
+ <link th:href="@{/css/snacks.css}" rel="stylesheet" />
+<link rel="stylesheet" href="/css/theme-toggle.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#ff6f61">
+<link rel="apple-touch-icon" href="/images/icon-192.png">
+</head>
+
+
+<script>
+  let cart = [];
+
+  function updatePrice(card) {
+    const rateLabel = card.querySelector('.rate-label');
+    const quantity = parseInt(card.dataset.quantity || '1');
+    const category = card.dataset.category || 'Unknown';
+    const price = parseInt(rateLabel.dataset.price || '0');
+    const quantityDisplay = card.querySelector('.quantity');
+    if (quantityDisplay) quantityDisplay.textContent = quantity;
+    rateLabel.textContent = (quantity * price) + ' /-';
+  }
+
+  function increment(element) {
+    const card = element.closest('.card');
+    let quantity = parseInt(card.dataset.quantity || '1');
+    quantity++;
+    card.dataset.quantity = quantity;
+    updatePrice(card);
+  }
+
+  function decrement(element) {
+    const card = element.closest('.card');
+    let quantity = parseInt(card.dataset.quantity || '1');
+    if (quantity > 1) {
+      quantity--;
+      card.dataset.quantity = quantity;
+      updatePrice(card);
+    }
+  }
+
+ 
+  function placeorder(button) {
+	    let card = button.parentElement;
+	    while (card && !card.classList.contains('card')) {
+	        card = card.parentElement;
+	    }
+
+	    if (!card) {
+	        console.error("Could not find card element.");
+	        return;
+	    }
+
+	    const nameElem = card.querySelector('.itemname');
+	    const name = nameElem.textContent.trim();
+	    const quantity = parseInt(card.dataset.quantity || '1');
+	    const rateLabel = card.querySelector('.rate-label');
+	    const pricePerItem = parseInt(rateLabel.dataset.price || '0');
+	    const totalPrice = pricePerItem * quantity;
+	    const category = card.dataset.category;
+
+	    // Toggle: if this item is already in the cart, this click removes it instead.
+	    if (card.dataset.inCart === 'true') {
+	        fetch('/cart/remove-by-name', {
+	            method: 'POST',
+	            headers: { 'Content-Type': 'application/json' },
+	            body: JSON.stringify({ name: name })
+	        }).then(response => {
+	            if (response.ok) {
+	                card.dataset.inCart = 'false';
+	                button.textContent = 'Order';
+	            } else {
+	                console.error("Failed to remove item from cart:", name);
+	            }
+	        });
+	        return;
+	    }
+
+	    fetch('/cart/add-to-session', {
+	        method: 'POST',
+	        headers: {
+	            'Content-Type': 'application/json'
+	        },
+	        body: JSON.stringify({
+	            name: name,
+	            quantity: quantity,
+	            category: category,
+	            price: pricePerItem
+	        })
+	    }).then(response => {
+	        if (response.ok) {
+	            card.dataset.inCart = 'true';
+	            button.textContent = 'Remove';
+	        } else {
+	            console.error("Failed to add item to cart:", name);
+	        }
+	    });
+	}
+
+
+
+  
+</script>
+
+
+<body>
+<div class="container-fluid px-3 px-md-4">
+
+    <h2>Welcome to FoodCourt! <span th:text="${username}"></span></h2>
+    
+       <nav>
+        <ul>
+        <li><p class="text">VarmaStyle</p></li>
+   <li><a th:href="@{/home}"><img alt="Logo" src="images/vslogo.jpeg" class="logo"></a></li>
+      <li><a th:href="@{/veg-currys}">Veg-Items</a></li>
+            <li><a th:href="@{/non-veg-currys}">Non-Veg Items</a></li>
+            <li><a th:href="@{/snacks}">starters</a></li>
+            <li><a th:href="@{/veg-biryanis}">Veg-Biryani's</a></li>
+            <li><a th:href="@{/non-veg-biryanis}">Non-Veg-Biryani's</a></li>
+            <li><a th:href="@{/cart}">Cart</a>
+          <!--    <li><a th:href="@{/orders}">Orders</a></li>   -->
+        
+            <li>
+                <a href="https://www.google.com/maps" target="_blank">
+                    <img class="map" src="images/maps.jpeg" alt="Map">
+                </a>
+            </li>
+            <li><a th:href="@{/logout}">Logout</a></li>
+        </ul>
+    </nav>
+
+<div>
+<div class="page">
+    <div class="container">
+<div class="card" data-category="staters">
+<div class="veg1">
+<a href="#" onclick="askName()"  rel="staters" >
+<img src="images/egg-spring-rolls.jpg" alt="staters">
+</a>
+<div class="itemname">Egg spring Roll</div>
+<div class="rating-box">
+	<span class="symbol"  onclick="decrement(this)">−</span>
+	   <span class="rate-label" data-price="170">170 /-</span>
+	   <span class="symbol" onclick="increment(this)">+</span>
+	</div>
+	<div class="button"><button  onclick="placeorder(this)">order</button></div>
+	</div>
+	</div>
+	
+	<div class="card" data-category="staters">
+	<div class="veg1">
+	<a href="#" onclick="askName()"  rel="staters" >
+	<img src="images/chicken-spring-rolls.webp" alt="staters">
+	</a>
+	<div class="itemname">Chicken spring Roll</div>
+	<div class="rating-box">
+	<span class="symbol"  onclick="decrement(this)">−</span>
+	   <span class="rate-label" data-price="250">250 /-</span>
+	   <span class="symbol" onclick="increment(this)">+</span>
+	</div>
+	<div class="button"><button onclick="placeorder(this)">order</button></div>
+	</div>
+	</div>
+	
+	<div class="card" data-category="staters">
+	<div class="veg1">
+	<a href="#" onclick="askName()"  rel="staters" >
+	<img src="images/chicken65.jpg" alt="staters">
+	</a>
+	<div class="itemname">Chicken 65</div>
+	<div class="rating-box">
+	<span class="symbol"  onclick="decrement(this)">−</span>
+	   <span class="rate-label" data-price="245">245 /-</span>
+	   <span class="symbol" onclick="increment(this)">+</span>
+	</div>
+	<div class="button"><button onclick="placeorder(this)">order</button></div>
+	</div>
+	</div>
+	
+	<div class="card" data-category="staters">
+	<div class="veg1">
+	<a href="#" onclick="askName()"  rel="staters" >
+	<img src="images/chilli-chicken.jpeg" alt="staters">
+	</a>
+	<div class="itemname">Chilli Chicken</div>
+	<div class="rating-box">
+	<span class="symbol"  onclick="decrement(this)">−</span>
+	   <span class="rate-label" data-price="250">250 /-</span>
+	   <span class="symbol" onclick="increment(this)">+</span>
+	</div>
+	<div class="button"><button onclick="placeorder(this)">order</button></div>
+	</div>
+	</div>
+	
+	<div class="card" data-category="staters">
+	<div class="veg1">
+	<a href="#" onclick="askName()"  rel="staters" >
+	<img src="images/chicken-manchurya.jpeg" alt="staters">
+	</a>
+	<div class="itemname">Chicken Manchuria</div>
+	<div class="rating-box">
+	<span class="symbol"  onclick="decrement(this)">−</span>
+	   <span class="rate-label" data-price="170">170 /-</span>
+	   <span class="symbol" onclick="increment(this)">+</span>
+	</div>
+	<div class="button"><button onclick="placeorder(this)">order</button></div>
+	</div>
+	</div></div>
+	</div></div>
+	
+	
+	<div class="page">
+    <div class="container">
+<div class="card" data-category="staters">
+<div class="veg1">
+<a href="#" onclick="askName()"  rel="staters" >
+<img src="images/pepper-chicken.jpg" alt="staters">
+</a>
+<div class="itemname">Pepper Chicken</div>
+<div class="rating-box">
+	<span class="symbol"  onclick="decrement(this)">−</span>
+	   <span class="rate-label" data-price="280">280 /-</span>
+	   <span class="symbol" onclick="increment(this)">+</span>
+	</div>
+	<div class="button"><button  onclick="placeorder(this)">order</button></div>
+	</div>
+	</div>
+	
+	<div class="card" data-category="staters">
+	<div class="veg1">
+	<a href="#" onclick="askName()"  rel="staters" >
+	<img src="images/tandoori-chicken.jpg" alt="staters">
+	</a>
+	<div class="itemname">Tandoori Chicken</div>
+	<div class="rating-box">
+	<span class="symbol"  onclick="decrement(this)">−</span>
+	   <span class="rate-label" data-price="370">370 /-</span>
+	   <span class="symbol" onclick="increment(this)">+</span>
+	</div>
+	<div class="button"><button onclick="placeorder(this)">order</button></div>
+	</div>
+	</div>
+	
+	<div class="card" data-category="staters">
+	<div class="veg1">
+	<a href="#" onclick="askName()"  rel="staters" >
+	<img src="images/barbeque-chicken.jpeg" alt="staters">
+	</a>
+	<div class="itemname">Barbeque Chicken</div>
+	<div class="rating-box">
+	<span class="symbol"  onclick="decrement(this)">−</span>
+	   <span class="rate-label" data-price="370">370 /-</span>
+	   <span class="symbol" onclick="increment(this)">+</span>
+	</div>
+	<div class="button"><button onclick="placeorder(this)">order</button></div>
+	</div>
+	</div>
+	
+	<div class="card" data-category="staters">
+	<div class="veg1">
+	<a href="#" onclick="askName()"  rel="staters" >
+	<img src="images/chicken-boti-kabab.jpeg" alt="staters">
+	</a>
+	<div class="itemname">Chicken Boti Kabab</div>
+	<div class="rating-box">
+	<span class="symbol"  onclick="decrement(this)">−</span>
+	   <span class="rate-label" data-price="330">330 /-</span>
+	   <span class="symbol" onclick="increment(this)">+</span>
+	</div>
+	<div class="button"><button onclick="placeorder(this)">order</button></div>
+	</div>
+	</div>
+	
+	<div class="card" data-category="staters">
+	<div class="veg1">
+	<a href="#" onclick="askName()"  rel="staters" >
+	<img src="images/chicken-lollipop.jpeg" alt="staters">
+	</a>
+	<div class="itemname">Chicken Lollipop</div>
+	<div class="rating-box">
+	<span class="symbol"  onclick="decrement(this)">−</span>
+	   <span class="rate-label" data-price="180">180 /-</span>
+	   <span class="symbol" onclick="increment(this)">+</span>
+	</div>
+	<div class="button"><button onclick="placeorder(this)">order</button></div>
+	</div>
+	</div>
+	</div></div>
+	
+	
+	<div class="page">
+    <div class="container">
+<div class="card" data-category="staters">
+<div class="veg1">
+<a href="#" onclick="askName()"  rel="staters" >
+<img src="images/Apollo-fish.jpeg" alt="staters">
+</a>
+<div class="itemname">Apollo Fish</div>
+<div class="rating-box">
+	<span class="symbol"  onclick="decrement(this)">−</span>
+	   <span class="rate-label" data-price="260">260 /-</span>
+	   <span class="symbol" onclick="increment(this)">+</span>
+	</div>
+	<div class="button"><button  onclick="placeorder(this)">order</button></div>
+	</div>
+	</div>
+	
+	<div class="card" data-category="staters">
+	<div class="veg1">
+	<a href="#" onclick="askName()"  rel="staters" >
+	<img src="images/Grilled-prawn.jpg" alt="staters">
+	</a>
+	<div class="itemname">Grilled prawns</div>
+	<div class="rating-box">
+	<span class="symbol"  onclick="decrement(this)">−</span>
+	   <span class="rate-label" data-price="330">330 /-</span>
+	   <span class="symbol" onclick="increment(this)">+</span>
+	</div>
+	<div class="button"><button onclick="placeorder(this)">order</button></div>
+	</div>
+	</div>
+	
+	<div class="card" data-category="staters">
+	<div class="veg1">
+	<a href="#" onclick="askName()"  rel="staters" >
+	<img src="images/prawns65.jpg" alt="staters">
+	</a>
+	<div class="itemname">prawns 65</div>
+	<div class="rating-box">
+	<span class="symbol"  onclick="decrement(this)">−</span>
+	   <span class="rate-label" data-price="360">360 /-</span>
+	   <span class="symbol" onclick="increment(this)">+</span>
+	</div>
+	<div class="button"><button onclick="placeorder(this)">order</button></div>
+	</div>
+	</div>
+	
+	<div class="card" data-category="staters">
+	<div class="veg1">
+	<a href="#" onclick="askName()"  rel="staters" >
+	<img src="images/paneer-tikka.jpg" alt="staters">
+	</a>
+	<div class="itemname">Paneer Tikka</div>
+	<div class="rating-box">
+	<span class="symbol"  onclick="decrement(this)">−</span>
+	   <span class="rate-label" data-price="190">190 /-</span>
+	   <span class="symbol" onclick="increment(this)">+</span>
+	</div>
+	<div class="button"><button onclick="placeorder(this)">order</button></div>
+	</div>
+	</div>
+	
+	<div class="card" data-category="staters">
+	<div class="veg1">
+	<a href="#" onclick="askName()"  rel="staters" >
+	<img src="images/spring-roll-veg.jpg" alt="staters">
+	</a>
+	<div class="itemname">Veg spring Rools</div>
+	<div class="rating-box">
+	<span class="symbol"  onclick="decrement(this)">−</span>
+	   <span class="rate-label" data-price="140">140 /-</span>
+	   <span class="symbol" onclick="increment(this)">+</span>
+	</div>
+	<div class="button"><button onclick="placeorder(this)">order</button></div>
+	</div>
+	</div>
+	</div></div>
+	
+	<div class="page">
+    <div class="container">
+<div class="card" data-category="staters">
+<div class="veg1">
+<a href="#" onclick="askName()"  rel="staters" >
+<img src="images/gobi-manchurian.webp" alt="staters">
+</a>
+<div class="itemname">Gobi-Manchuria</div>
+<div class="rating-box">
+	<span class="symbol"  onclick="decrement(this)">−</span>
+	   <span class="rate-label" data-price="140">140 /-</span>
+	   <span class="symbol" onclick="increment(this)">+</span>
+	</div>
+	<div class="button"><button  onclick="placeorder(this)">order</button></div>
+	</div>
+	</div>
+	
+	<div class="card" data-category="staters">
+	<div class="veg1">
+	<a href="#" onclick="askName()"  rel="staters" >
+	<img src="images/paneer-65.jpg" alt="staters">
+	</a>
+	<div class="itemname">paneer-65</div>
+	<div class="rating-box">
+	<span class="symbol"  onclick="decrement(this)">−</span>
+	   <span class="rate-label" data-price="150">150 /-</span>
+	   <span class="symbol" onclick="increment(this)">+</span>
+	</div>
+	<div class="button"><button onclick="placeorder(this)">order</button></div>
+	</div>
+	</div>
+	
+	<div class="card" data-category="staters">
+	<div class="veg1">
+	<a href="#" onclick="askName()"  rel="staters" >
+	<img src="images/chilly-paneer.jpg" alt="staters">
+	</a>
+	<div class="itemname">paneer-chilly</div>
+	<div class="rating-box">
+	<span class="symbol"  onclick="decrement(this)">−</span>
+	   <span class="rate-label" data-price="180">180 /-</span>
+	   <span class="symbol" onclick="increment(this)">+</span>
+	</div>
+	<div class="button"><button onclick="placeorder(this)">order</button></div>
+	</div>
+	</div>
+	
+	<div class="card" data-category="staters">
+	<div class="veg1">
+	<a href="#" onclick="askName()"  rel="staters" >
+	<img src="images/veg-lollipop.jpeg" alt="staters">
+	</a>
+	<div class="itemname">veg-Lollipop</div>
+	<div class="rating-box">
+	<span class="symbol"  onclick="decrement(this)">−</span>
+	   <span class="rate-label" data-price="100">100 /-</span>
+	   <span class="symbol" onclick="increment(this)">+</span>
+	</div>
+	<div class="button"><button onclick="placeorder(this)">order</button></div>
+	</div>
+	</div>
+	
+	<div class="card" data-category="staters">
+	<div class="veg1">
+	<a href="#" onclick="askName()"  rel="staters" >
+	<img src="images/mashroom65.jpeg" alt="staters">
+	</a>
+	<div class="itemname">Mashroom 65</div>
+	<div class="rating-box">
+	<span class="symbol"  onclick="decrement(this)">−</span>
+	   <span class="rate-label" data-price="170">170 /-</span>
+	   <span class="symbol" onclick="increment(this)">+</span>
+	</div>
+	<div class="button"><button onclick="placeorder(this)">order</button></div>
+	</div>
+	</div>
+	</div></div>
+	
+	
+	
+
+<div class="pagination">
+  <button onclick="prevPage()">Previous</button>
+  <span id="pageNumbers" class="page-numbers"></span>
+  <button onclick="nextPage()">Next</button>
+</div>
+
+<style>
+  .page-numbers { display: inline-flex; gap: 6px; margin: 0 10px; }
+  .page-numbers button {
+    min-width: 34px;
+    padding: 6px 10px;
+    border: 1px solid #ccc;
+    background: #fff;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .page-numbers button.active {
+    background: #333;
+    color: #fff;
+    border-color: #333;
+    font-weight: bold;
+  }
+</style>
+
+<script>
+  let currentPage = 1;
+  let pages;
+  let pageNumbersEl;
+
+  function renderPageNumbers() {
+    pageNumbersEl.innerHTML = '';
+    for (let i = 1; i <= pages.length; i++) {
+      const btn = document.createElement('button');
+      btn.textContent = i;
+      btn.type = 'button';
+      if (i === currentPage) btn.classList.add('active');
+      btn.onclick = () => goToPage(i);
+      pageNumbersEl.appendChild(btn);
+    }
+  }
+
+  function showPage(page) {
+    pages.forEach((p, index) => {
+      p.style.display = index === page - 1 ? 'block' : 'none';
+    });
+    renderPageNumbers();
+  }
+
+  function goToPage(page) {
+    currentPage = page;
+    showPage(currentPage);
+  }
+
+  function nextPage() {
+    if (currentPage < pages.length) {
+      currentPage++;
+      showPage(currentPage);
+    }
+  }
+
+  function prevPage() {
+    if (currentPage > 1) {
+      currentPage--;
+      showPage(currentPage);
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    pages = document.querySelectorAll('.page');
+    pageNumbersEl = document.getElementById('pageNumbers');
+    showPage(currentPage);
+  });
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</div>
+<script src="/js/theme-toggle.js"></script>
+<script src="/js/pwa-init.js"></script>
+</body>
+</html>

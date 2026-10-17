@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+  /* Mobile-friendly tweaks on top of Bootstrap */
+  body { padding-left: 0; padding-right: 0; }
+  table { max-width: 100%; }
+  .table-responsive-wrap { overflow-x: auto; }
+  img { max-width: 100%; height: auto; }
+  @media (max-width: 576px) {
+    h1 { font-size: 1.5rem; }
+    h2 { font-size: 1.25rem; }
+    .payment-option { width: 100% !important; }
+    .form-group input, .form-group select { width: 100% !important; box-sizing: border-box; }
+  }
+
+  .upi-qrcode {
+    display: flex;
+    justify-content: center;
+    margin: 0.75rem 0 0.4rem;
+  }
+  .upi-amount-hint {
+    text-align: center;
+    font-size: 0.8rem;
+    color: #555;
+    margin-top: -0.2rem;
+  }
+  .upi-pay-link {
+    display: inline-block;
+    margin: 0.4rem 0 0.6rem;
+    text-decoration: none;
+    color: #fff !important;
+  }
+
+  .discount-tier-box {
+    margin-bottom: 1rem;
+    padding: 0.6rem;
+    background: #fff8e1;
+    border: 1px solid #ffd54f;
+    border-radius: 6px;
+    font-weight: bold;
+    color: #5c4a00;
+  }
+  body.dark-mode .discount-tier-box {
+    background: #4a3c00 !important;
+    border-color: #a68b00 !important;
+    color: #ffe58a !important;
+  }
+</style>
+<meta charset="UTF-8">
+<title>Order Summary</title>
+<style>
+body {
+	font-family: Arial, sans-serif;
+	background: #f0f8ff;
+	padding: 2rem;
+	color: #333;
+}
+
+h1, h2 {
+	text-align: center;
+}
+
+.payment-section {
+	margin-top: 3rem;
+	padding: 1.5rem;
+	background-color: #fff;
+	border-radius: 10px;
+	box-shadow: 0 0 10px #ccc;
+	max-width: 700px;
+	margin-left: auto;
+	margin-right: auto;
+}
+
+.payment-section h3 {
+	margin-bottom: 1rem;
+}
+
+.payment-option {
+	margin: 1rem 0;
+}
+
+.payment-option input {
+	margin-right: 0.5rem;
+}
+
+.details {
+	margin-left: 2rem;
+	display: none;
+}
+
+.details img {
+	max-width: 200px;
+	margin-top: 1rem;
+}
+
+.details p {
+	margin: 0.3rem 0;
+}
+
+button {
+	margin-top: 1rem;
+	padding: 0.6rem 1.5rem;
+	background-color: #28a745;
+	border: none;
+	color: white;
+	font-size: 1rem;
+	border-radius: 5px;
+	cursor: pointer;
+}
+
+button:hover {
+	background-color: #218838;
+}
+
+.p {
+	color: #218838;
+}
+
+.form-group {
+	margin-top: 1rem;
+}
+
+.form-group input {
+	width: 95%;
+	padding: 0.5rem;
+	margin-top: 0.3rem;
+	border: 1px solid #ccc;
+	border-radius: 5px;
+}
+
+.button-group {
+	display: flex;
+	justify-content: space-between;
+	gap: 1rem;
+}
+</style>
+
+
+<script th:inline="javascript">
+// Owner's UPI ID, injected from the server (set via OWNER_UPI_ID env var).
+const OWNER_UPI_ID = /*[[${ownerUpi}]]*/ 'yourupi@bank';
+
+// Discount tiers, same thresholds used in applyCoupon() below.
+function getDiscountTier(amount) {
+    if (amount < 100) return { rateLabel: '2%', nextThreshold: 100, nextLabel: '10%' };
+    if (amount < 1000) return { rateLabel: '10%', nextThreshold: 1000, nextLabel: '30%' };
+    if (amount < 2500) return { rateLabel: '30%', nextThreshold: 2500, nextLabel: '50%' };
+    return { rateLabel: '50%', nextThreshold: null, nextLabel: null };
+}
+
+function updateDiscountTierMessage() {
+    const originalAmountEl = document.getElementById("originalAmount");
+    const msgEl = document.getElementById("discountTierMessage");
+    if (!originalAmountEl || !msgEl) return;
+
+    const amount = parseFloat(originalAmountEl.getAttribute("data-original"));
+    if (isNaN(amount)) return;
+
+    const tier = getDiscountTier(amount);
+    let msg = `🎟️ Enter coupon code "COUPON" to get ${tier.rateLabel} off this order (₹${amount.toFixed(2)}).`;
+
+    if (tier.nextThreshold) {
+        const remaining = (tier.nextThreshold - amount).toFixed(2);
+        msg += ` Add ₹${remaining} more to unlock ${tier.nextLabel} off!`;
+    } else {
+        msg += ` 🎉 You've already unlocked our best discount tier!`;
+    }
+    msgEl.textContent = msg;
+}
+
+document.addEventListener("DOMContentLoaded", updateDiscountTierMessage);
+
+// ---- Dynamic UPI QR codes: the QR encodes the exact amount due, so
+// scanning it in PhonePe/GPay/Paytm/any UPI app auto-fills the amount. ----
+const upiQrInstances = {}; // one QRCode.js instance per payment option, reused/updated in place
+
+function getCurrentAmount() {
+    const finalAmountEl = document.getElementById("finalAmount");
+    if (!finalAmountEl) return 0;
+    const amount = parseFloat(finalAmountEl.textContent.trim());
+    return isNaN(amount) ? 0 : amount;
+}
+
+function buildUpiUri(amount) {
+    const params = new URLSearchParams({
+        pa: OWNER_UPI_ID,          // payee UPI ID
+        pn: 'FoodCourt',           // payee name
+        am: amount.toFixed(2),     // amount - this is what auto-fills in the scanning app
+        cu: 'INR',
+        tn: 'FoodCourt Order Payment'
+    });
+    return 'upi://pay?' + params.toString();
+}
+
+function refreshUpiQrCodes() {
+    const amount = getCurrentAmount();
+    const uri = buildUpiUri(amount);
+
+    ['phonepe-qrcode', 'gpay-qrcode', 'paytm-qrcode', 'anyupi-qrcode'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el || typeof QRCode === 'undefined') return;
+
+        if (upiQrInstances[id]) {
+            upiQrInstances[id].clear();
+            upiQrInstances[id].makeCode(uri);
+        } else {
+            upiQrInstances[id] = new QRCode(el, {
+                text: uri,
+                width: 180,
+                height: 180
+            });
+        }
+    });
+
+    // Same URI powers the "tap to pay" links - these open the phone's UPI
+    // app chooser directly (no app-specific targeting is actually possible
+    // from a plain web link, so every one of these behaves the same way;
+    // the OS decides which app(s) can handle it).
+    ['phonepe-pay-link', 'gpay-pay-link', 'paytm-pay-link', 'anyupi-pay-link'].forEach(id => {
+        const link = document.getElementById(id);
+        if (link) link.setAttribute('href', uri);
+    });
+}
+
+document.addEventListener("DOMContentLoaded", refreshUpiQrCodes);
+
+// Clicking a payment option shows its QR/details; clicking the SAME option
+// again closes it and deselects that payment method.
+let lastSelectedPayment = null;
+
+// Luhn algorithm - the standard checksum used by all major card networks to
+// catch typos/invalid numbers. This does NOT verify the card is real, has
+// funds, or belongs to the person - only that the number is well-formed.
+function isValidCardNumber(rawNumber) {
+    const digits = rawNumber.replace(/\D/g, '');
+    if (digits.length < 12 || digits.length > 19) return false;
+
+    let sum = 0;
+    let shouldDouble = false;
+    for (let i = digits.length - 1; i >= 0; i--) {
+        let digit = parseInt(digits.charAt(i), 10);
+        if (shouldDouble) {
+            digit *= 2;
+            if (digit > 9) digit -= 9;
+        }
+        sum += digit;
+        shouldDouble = !shouldDouble;
+    }
+    return sum % 10 === 0;
+}
+
+function isValidExpiry(value) {
+    const match = value.trim().match(/^(0[1-9]|1[0-2])\/?([0-9]{2})$/);
+    if (!match) return false;
+    const month = parseInt(match[1], 10);
+    const year = 2000 + parseInt(match[2], 10);
+
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+
+    if (year < currentYear) return false;
+    if (year === currentYear && month < currentMonth) return false;
+    return true;
+}
+
+function showDetails(paymentId) {
+
+    const radio = document.getElementById(paymentId);
+
+    if (lastSelectedPayment === paymentId) {
+        // Same option clicked again -> close it.
+        document.querySelectorAll('.details').forEach(el => el.style.display = 'none');
+        if (radio) radio.checked = false;
+        lastSelectedPayment = null;
+        return;
+    }
+
+    document.querySelectorAll('.details').forEach(el => el.style.display = 'none');
+    const selected = document.getElementById(paymentId + '-details');
+    if (selected) selected.style.display = 'block';
+    lastSelectedPayment = paymentId;
+}
+
+function handleSubmit(event) {
+    const selectedPayment = document.querySelector('input[name="paymentMode"]:checked');
+    const email = document.getElementById("email").value.trim();
+    const customerNumber = document.getElementById("customerNumber").value.trim();
+    const addressLine = document.getElementById("addressLine").value.trim();
+    const city = document.getElementById("city").value.trim();
+    const mandal = document.getElementById("mandal").value.trim();
+    const district = document.getElementById("district").value.trim();
+    const state = document.getElementById("state").value.trim();
+    const pincode = document.getElementById("pincode").value.trim();
+
+    if (!selectedPayment) {
+        alert("Please select a payment method.");
+        event.preventDefault();
+        return;
+    }
+
+    if (selectedPayment.value === "debit" || selectedPayment.value === "credit") {
+        const details = document.getElementById(selectedPayment.value + "-details");
+        const numberField = details.querySelector('input[name$="ardNumber"]');
+        const nameField = details.querySelector('input[name$="ardName"]');
+        const expiryField = details.querySelector('input[name$="xpiry"]');
+        const cvvField = details.querySelector('input[name$="vv"]');
+
+        if (!numberField.value.trim() || !nameField.value.trim() || !expiryField.value.trim() || !cvvField.value.trim()) {
+            alert("Please fill in all card details.");
+            event.preventDefault();
+            return;
+        }
+
+        if (!isValidCardNumber(numberField.value)) {
+            alert("That card number doesn't look valid. Please double-check it.");
+            event.preventDefault();
+            return;
+        }
+
+        if (!isValidExpiry(expiryField.value)) {
+            alert("Please enter a valid, non-expired expiry date in MM/YY format.");
+            event.preventDefault();
+            return;
+        }
+
+        if (!/^[0-9]{3,4}$/.test(cvvField.value.trim())) {
+            alert("Please enter a valid 3 or 4 digit CVV.");
+            event.preventDefault();
+            return;
+        }
+    }
+
+    if (selectedPayment.value === "phonepe" || selectedPayment.value === "gpay" || selectedPayment.value === "paytm" || selectedPayment.value === "anyupi") {
+        const details = document.getElementById(selectedPayment.value + "-details");
+        const txnField = details.querySelector('input[name="upiTransactionId"]');
+        if (!txnField || !txnField.value.trim()) {
+            alert("Please complete the payment in your UPI app and enter the Transaction ID / UTR shown after payment.");
+            event.preventDefault();
+            return;
+        }
+    }
+
+    if (!addressLine || !city || !mandal || !district || !state || !pincode) {
+        alert("Please fill in your full delivery address (address, city, mandal, district, state, pincode).");
+        event.preventDefault();
+        return;
+    }
+
+    if (!/^[0-9]{6}$/.test(pincode)) {
+        alert("Please enter a valid 6-digit pincode.");
+        event.preventDefault();
+        return;
+    }
+
+    if (!email && !customerNumber) {
+        alert("Please provide your email (used to send the order confirmation) or a customer number (for contact).");
+        event.preventDefault();
+        return;
+    }
+
+    if (email) {
+        event.preventDefault(); // Stop form for now
+        sendMessage(() => {
+            document.querySelector("form").submit();
+        });
+        return;
+    }
+}
+
+let couponApplied = false;
+
+function applyCoupon() {
+    const couponInput = document.getElementById("coupon").value.trim().toLowerCase();
+    const finalAmountElement = document.getElementById("finalAmount");
+    const couponAmountElement = document.getElementById("couponAmount");
+    const hiddenAmountInput = document.querySelector('input[name="amount"]');
+    const paymentSelected = document.querySelector('input[name="paymentMode"]:checked');
+
+    // FIX: Make sure originalAmount is parsed safely
+    const originalAmountEl = document.getElementById("originalAmount");
+    const originalAmountAttr = originalAmountEl.getAttribute("data-original");
+    const originalAmount = parseFloat(originalAmountAttr);
+
+    // Validate values
+    if (isNaN(originalAmount)) {
+        alert("❌ Error: Original amount is invalid or missing.");
+        return;
+    }
+
+    if (!paymentSelected) {
+        alert("⚠️ Please select a payment method before applying the coupon.");
+        return;
+    }
+
+    if (couponApplied) {
+        alert("⚠️ Coupon already applied.");
+        return;
+    }
+
+    let discount = 0;
+
+    if (couponInput === "coupon") {
+        if (originalAmount < 100) {
+            discount = originalAmount * 0.02;
+        } else if (originalAmount >= 100 && originalAmount < 1000) {
+            discount = originalAmount * 0.10;
+        } else if (originalAmount >= 1000 && originalAmount < 2500) {
+            discount = originalAmount * 0.30;
+        } else {
+            discount = originalAmount * 0.50;
+        }
+
+        const finalAmount = originalAmount - discount;
+
+        // Update UI
+        couponAmountElement.textContent = `${discount.toFixed(2)}`;
+        finalAmountElement.textContent = `${finalAmount.toFixed(2)}`;
+        hiddenAmountInput.value = finalAmount.toFixed(2);
+
+        document.getElementById("coupon").disabled = true;
+        document.getElementById("applyBtn").disabled = true;
+        document.getElementById("cancelBtn").style.display = "inline";
+
+        couponApplied = true;
+        alert("✅ Coupon applied successfully!");
+
+        const tier = getDiscountTier(originalAmount);
+        document.getElementById("discountTierMessage").textContent =
+            `✅ Coupon applied! You saved ₹${discount.toFixed(2)} (${tier.rateLabel} off).`;
+
+        refreshUpiQrCodes();
+    } else {
+        alert("❌ Invalid coupon code. Please try again.");
+    }
+}
+
+function updateCartCount() {
+    fetch('/cart/count')
+        .then(response => response.json())
+        .then(count => {
+            const cartCount = document.getElementById('cart-count');
+
+            if (cartCount) {
+                cartCount.textContent = count;
+            }
+        })
+        .catch(error => console.error(error));
+}
+
+function cancelCoupon() {
+    const finalAmountElement = document.getElementById("finalAmount");
+    const couponAmountElement = document.getElementById("couponAmount");
+    const hiddenAmountInput = document.querySelector('input[name="amount"]');
+
+    // ✅ New: get backend-calculated discount (no coupon)
+    const discountedAmount = parseFloat(finalAmountElement.getAttribute("data-discounted"));
+
+    couponAmountElement.textContent = "0.00";
+    finalAmountElement.textContent = `${discountedAmount.toFixed(2)}`;
+    hiddenAmountInput.value = discountedAmount.toFixed(2);
+
+    document.getElementById("coupon").disabled = false;
+    document.getElementById("applyBtn").disabled = false;
+    document.getElementById("coupon").value = "";
+    document.getElementById("cancelBtn").style.display = "none";
+
+    couponApplied = false;
+    updateDiscountTierMessage();
+    refreshUpiQrCodes();
+}
+
+
+
+
+
+function sendMessage(callback) {
+    const selectedPayment = document.querySelector('input[name="paymentMode"]:checked');
+    const email = document.getElementById("email").value.trim();
+
+    if (!selectedPayment || !email) {
+        alert("Please select a payment method and provide a valid email.");
+        return;
+    }
+
+    const amount = document.querySelector('input[name="amount"]').value;
+    const username = document.querySelector('input[name="username"]').value;
+    const paymentMode = selectedPayment.value;
+
+    const message = `Thank you for your order, ${username}! Paid ₹${amount} via ${paymentMode}.`;
+    alert(`✅ Message sent to ${email}:\n\n${message}`);
+
+    if (callback) setTimeout(callback, 500);
+}
+
+
+</script>
+
+
+
+<link rel="stylesheet" href="/css/theme-toggle.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#ff6f61">
+<link rel="apple-touch-icon" href="/images/icon-192.png">
+</head>
+<body>
+<div class="container-fluid px-3 px-md-4">
+
+	<div th:if="${error}"
+		style="background:#ffe0e0;color:#900;padding:10px;text-align:center;font-weight:bold;"
+		th:text="${error}">
+	</div>
+
+	<h2>
+		Welcome to FoodCourt, <span th:text="${username}">User</span>!
+	</h2>
+
+	<!-- Original Amount -->
+	<h2>
+		Original Amount: ₹<span id="originalAmount"
+			th:attr="data-original=${totalAmount}" th:text="${totalAmount}">0.00</span>
+	</h2>
+
+	<!-- Discount -->
+	<h3 style="text-align: center">
+		Discount: ₹<span id="discount" th:text="${discount}">0.00</span>
+	</h3>
+
+	<!-- Coupon Amount (Fixed) -->
+	<h3 style="text-align: center">
+		coupon-discount : ₹<span id="couponAmount" th:text="${coupon}">0.00</span>
+
+	</h3>
+
+	<!-- Final Amount -->
+	<h1>
+		Final Amount: ₹ <span id="finalAmount"
+			th:text="${finaltotalAmount != null ? finaltotalAmount : totalAmount}"
+			th:attr="data-original=${totalAmount}, data-discounted=${finaltotalAmount != null ? finaltotalAmount : totalAmount}">
+			0.00 </span>
+	</h1>
+
+
+
+
+
+	<div class="payment-section">
+		<h3>Select a Payment Method:</h3>
+
+		<div id="discountTierMessage" class="discount-tier-box">
+		</div>
+
+		<form th:action="@{/payment/confirm}" method="post"
+			onsubmit="handleSubmit(event)">
+
+
+			<!-- PhonePe -->
+			<div class="payment-option">
+				<input type="radio" id="phonepe" name="paymentMode" value="phonepe"
+					onclick="showDetails('phonepe')"> <label for="phonepe">PhonePe</label>
+				<div class="details" id="phonepe-details">
+					<div id="phonepe-qrcode" class="upi-qrcode"></div>
+					<p class="upi-amount-hint">Scan with PhonePe — amount is filled automatically</p>
+				<!-- 	<p class="text-center"><a id="phonepe-pay-link" href="#" class="btn btn-sm btn-success upi-pay-link">📱 On this phone? Tap to open PhonePe</a></p>
+				 	<p>
+						<label>After paying, enter the UPI Transaction ID / UTR shown in your PhonePe app (required):</label><br>
+						<input type="text" name="upiTransactionId" class="upi-txn-input" placeholder="e.g. 123456789012">
+					</p> -->
+					<p>
+						<strong>Account Holder Name:</strong> <span class="p">Rajesh
+							Varma</span>
+					</p>
+					<p>
+						<strong>Account No:</strong> <span class="p">2549795706</span>
+					</p>
+					<p>
+						<strong>IFSC:</strong> KKBK0007533
+					</p>
+				</div>
+			</div>
+
+			<!-- GPay -->
+			<div class="payment-option">
+				<input type="radio" id="gpay" name="paymentMode" value="gpay"
+					onclick="showDetails('gpay')"> <label for="gpay">GPay</label>
+				<div class="details" id="gpay-details">
+					<div id="gpay-qrcode" class="upi-qrcode"></div>
+					<p class="upi-amount-hint">Scan with Google Pay — amount is filled automatically</p>
+				<!--  	<p class="text-center"><a id="gpay-pay-link" href="#" class="btn btn-sm btn-success upi-pay-link">📱 On this phone? Tap to open Google Pay</a></p>
+				 	<p>
+						<label>After paying, enter the UPI Transaction ID / UTR shown in your Google Pay app (required):</label><br>
+						<input type="text" name="upiTransactionId" class="upi-txn-input" placeholder="e.g. 123456789012">
+					</p>  -->
+					<p>
+						<strong>Account No:</strong> 2549795706
+					</p>
+					<p>
+						<strong>IFSC:</strong> KKBK0007533
+					</p>
+				</div>
+			</div>
+
+			<!-- Paytm -->
+			<div class="payment-option">
+				<input type="radio" id="paytm" name="paymentMode" value="paytm"
+					onclick="showDetails('paytm')"> <label for="paytm">Paytm</label>
+				<div class="details" id="paytm-details">
+					<div id="paytm-qrcode" class="upi-qrcode"></div>
+					<p class="upi-amount-hint">Scan with Paytm — amount is filled automatically</p>
+				<!-- 	<p class="text-center"><a id="paytm-pay-link" href="#" class="btn btn-sm btn-success upi-pay-link">📱 On this phone? Tap to open Paytm</a></p>
+				  	<p>
+						<label>After paying, enter the UPI Transaction ID / UTR shown in your Paytm app (required):</label><br>
+						<input type="text" name="upiTransactionId" class="upi-txn-input" placeholder="e.g. 123456789012">
+					</p>  -->
+					<p>
+						<strong>Account No:</strong> 2549795706
+					</p>
+					<p>
+						<strong>IFSC:</strong> KKBK0007533
+					</p>
+				</div>
+			</div>
+
+			<!-- Any UPI app (generic - no specific app targeted, so any UPI app
+			     installed on the phone can open it; on desktop, scan the QR instead) -->
+			<div class="payment-option">
+				<input type="radio" id="anyupi" name="paymentMode" value="anyupi"
+					onclick="showDetails('anyupi')"> <label for="anyupi">Any UPI App</label>
+				<div class="details" id="anyupi-details">
+					<div id="anyupi-qrcode" class="upi-qrcode"></div>
+				<!--	<p class="upi-amount-hint">Scan with any UPI app — amount is filled automatically</p>
+					<p class="text-center"><a id="anyupi-pay-link" href="#" class="btn btn-sm btn-success upi-pay-link">📱 On this phone? Tap to choose a UPI app</a></p>
+				  	<p>
+						<label>After paying, enter the UPI Transaction ID / UTR shown in your UPI app (required):</label><br>
+						<input type="text" name="upiTransactionId" class="upi-txn-input" placeholder="e.g. 123456789012">
+					</p>  -->
+				</div>
+			</div>
+
+			<!-- Debit Card -->
+			<div class="payment-option">
+				<input type="radio" id="debit" name="paymentMode" value="debit"
+					onclick="showDetails('debit')"> <label for="debit">Debit
+					Card</label>
+				<div class="details" id="debit-details">
+					<p>
+						<input type="text" name="cardNumber" placeholder="Card Number">
+					</p>
+					<p>
+						<input type="text" name="cardName" placeholder="Card Holder Name">
+					</p>
+					<p>
+						<input type="text" name="expiry" placeholder="MM/YY">
+					</p>
+					<p>
+						<input type="password" name="cvv" placeholder="CVV">
+					</p>
+				</div>
+			</div>
+
+			<!-- Credit Card -->
+			<div class="payment-option">
+				<input type="radio" id="credit" name="paymentMode" value="credit"
+					onclick="showDetails('credit')"> <label for="credit">Credit
+					Card</label>
+				<div class="details" id="credit-details">
+					<p>
+						<input type="text" name="creditCardNumber" placeholder="Card Number">
+					</p>
+					<p>
+						<input type="text" name="creditCardName" placeholder="Card Holder Name">
+					</p>
+					<p>
+						<input type="text" name="creditExpiry" placeholder="MM/YY">
+					</p>
+					<p>
+						<input type="password" name="creditCvv" placeholder="CVV">
+					</p>
+				</div>
+			</div>
+
+			<!-- Cash on Delivery -->
+			<div class="payment-option">
+				<input type="radio" id="cod" name="paymentMode" value="cod"
+					onclick="showDetails('cod')"> <label for="cod">Cash
+					on Delivery</label>
+			</div>
+
+			<div style="margin-top: 1rem;">
+				<input type="text" id="coupon" placeholder="Enter coupon code" />
+				<button id="applyBtn" type="button" onclick="applyCoupon()">Apply
+					Coupon</button>
+				<button id="cancelBtn" type="button" onclick="cancelCoupon()"
+					style="display: none; background-color: #dc3545;">Cancel
+					Coupon</button>
+
+			</div>
+
+
+			<!-- Hidden Fields -->
+			<input type="hidden" name="amount" th:value="${totalAmount}" /> <input
+				type="hidden" name="username" th:value="${username}" />
+
+			<!-- Delivery Address -->
+			<h4 style="margin-top: 1.5rem;">Delivery Address</h4>
+			<div class="form-group">
+				<label for="addressLine">Address (House/Flat no, Street, Area):</label>
+				<input type="text" id="addressLine" name="addressLine"
+					placeholder="House/Flat no, Street, Area" required>
+			</div>
+			<div class="form-group">
+				<label for="landmark">Landmark:</label>
+				<input type="text" id="landmark" name="landmark"
+					placeholder="Nearby landmark (optional)">
+			</div>
+			<div class="form-group">
+				<label for="city">Village/Town/City:</label> <input type="text" id="city"
+					name="city" placeholder="Village/Town/City" required>
+			</div>
+			<div class="form-group">
+				<label for="mandal">Mandal/Taluk:</label> <input type="text" id="mandal"
+					name="mandal" placeholder="Mandal/Taluk" required>
+			</div>
+			<div class="form-group">
+				<label for="district">District:</label> <input type="text" id="district"
+					name="district" placeholder="District" required>
+			</div>
+			<div class="form-group">
+				<label for="state">State:</label> <input type="text" id="state"
+					name="state" placeholder="State" required>
+			</div>
+			<div class="form-group">
+				<label for="pincode">Pincode:</label> <input type="text"
+					id="pincode" name="pincode" placeholder="6-digit Pincode" required
+					pattern="[0-9]{6}" maxlength="6">
+			</div>
+
+			<!-- Email (sends the order confirmation) and Customer Number (kept for contact/reference only) -->
+			<p style="font-size: 0.85rem; color: #555;">Email is used to send your confirmation; customer number is kept so we can call you if needed:</p>
+			<div class="form-group">
+				<label for="email">Customer Email:</label> <input type="email"
+					id="email" name="email" placeholder="Enter customer's email">
+			</div>
+			<div class="form-group">
+				<label for="customerNumber">Customer Number (10-digit is fine — +91 added automatically for India):</label>
+				<input type="text" id="customerNumber" name="customerNumber" placeholder="e.g. 9876543210 or +919876543210">
+			</div>
+
+			<!-- Buttons -->
+			<div class="button-group">
+				<button type="submit">Proceed to Pay</button>
+			</div>
+
+		</form>
+	</div>
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</div>
+<script src="/js/theme-toggle.js"></script>
+<script src="/js/pwa-init.js"></script>
+</body>
+</html>

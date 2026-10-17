@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+  /* Mobile-friendly tweaks on top of Bootstrap */
+  body { padding-left: 0; padding-right: 0; }
+  table { max-width: 100%; }
+  .table-responsive-wrap { overflow-x: auto; }
+  img { max-width: 100%; height: auto; }
+  @media (max-width: 576px) {
+    h1 { font-size: 1.5rem; }
+    h2 { font-size: 1.25rem; }
+    .payment-option { width: 100% !important; }
+    .form-group input, .form-group select { width: 100% !important; box-sizing: border-box; }
+  }
+</style>
+<meta charset="UTF-8" />
+<title>Your Cart</title>
+
+<script>
+function removeFromCart(index) {
+  fetch(`/cart/remove/${index}`, {
+    method: 'DELETE'
+  })
+  .then(response => response.text())
+  .then(data => alert(data));
+}
+
+function updateCartCount() {
+    fetch('/cart/count')
+        .then(response => response.json())
+        .then(count => {
+            const cartCount = document.getElementById('cart-count');
+
+            if (cartCount) {
+                cartCount.textContent = count;
+            }
+        })
+        .catch(error => console.error(error));
+}
+</script>
+<style>
+body {
+	font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+	margin: 2rem;
+	background-color: #f0f2f5;
+	color: #333;
+}
+
+h1 {
+	text-align: center;
+	color: #2c3e50;
+	margin-bottom: 2rem;
+}
+
+table {
+	width: 100%;
+	border-collapse: collapse;
+	margin-bottom: 2rem;
+	background-color: #fff;
+	border-radius: 10px;
+	overflow: hidden;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+th, td {
+	padding: 1rem;
+	border-bottom: 1px solid #e0e0e0;
+	text-align: center;
+}
+
+th {
+	background-color: #007bff;
+	color: #fff;
+	font-size: 1.1rem;
+}
+
+tr:last-child td {
+	border-bottom: none;
+}
+
+a.remove-link {
+	color: #e74c3c;
+	text-decoration: none;
+	font-weight: 500;
+	transition: color 0.3s ease;
+}
+
+a.remove-link:hover {
+	color: #c0392b;
+	text-decoration: underline;
+	cursor: pointer;
+}
+
+.total {
+	font-size: 1.25rem;
+	font-weight: bold;
+	text-align: right;
+	margin-top: 1rem;
+	color: #333;
+}
+
+form {
+	margin: 1.5rem 0;
+	text-align: center;
+}
+
+label {
+	margin-right: 0.5rem;
+	font-weight: 600;
+	font-size: 1rem;
+}
+
+select, button {
+	padding: 0.6rem 1.2rem;
+	margin-left: 0.5rem;
+	font-size: 1rem;
+	border: 1px solid #ccc;
+	border-radius: 6px;
+	transition: all 0.3s ease;
+}
+
+select {
+	background-color: #fff;
+}
+
+button {
+	background-color: #28a745;
+	color: white;
+	border: none;
+	font-weight: 600;
+}
+
+button:hover {
+	background-color: #218838;
+	transform: translateY(-1px);
+	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.message {
+	color: #28a745;
+	text-align: center;
+	font-weight: bold;
+	margin-top: 1rem;
+}
+
+h2 {
+	text-align: center;
+	color: #444;
+	margin-top: 2rem;
+	Color: green;
+}
+
+h5 {
+	text-align: center;
+	margin-top: 1rem;
+	font-weight: normal;
+	color: #555;
+}
+
+h5 button {
+	background-color: #007bff;
+	color: white;
+	border: none;
+	padding: 0.5rem 1rem;
+	font-size: 0.95rem;
+	border-radius: 5px;
+	cursor: pointer;
+}
+
+h5 button:hover {
+	background-color: #0056b3;
+}
+
+.button-row {
+	display: flex;
+	justify-content: space-between; /* One to left, one to right */
+	padding: 10px 20px;
+	cursor: pointer;
+}
+</style>
+
+<script>
+	function confirmRemoval(event, itemName) {
+		// No confirmation prompt - removal happens immediately on click.
+	}
+	
+	
+	
+	
+	function addToCart(name, quantity, category, price) {
+	  fetch('/cart/add-to-session', {
+	    method: 'POST',
+	    headers: { 'Content-Type': 'application/json' },
+	    body: JSON.stringify({
+	      name: name,
+	      quantity: quantity,
+	      category: category,
+	      price: price
+	    })
+	  })
+	  .then(response => response.text())
+	  .then(message => {
+	    alert(message);  // e.g., "Item added"
+	    // Optional: update cart count or redirect
+	  })
+	  .catch(error => {
+	    console.error('Error adding item to cart:', error);
+	  });
+	}
+	
+
+	
+	
+	 function checkCartAndPlaceOrder() {
+		    const cartRows = document.querySelectorAll("tbody tr");
+		    if (cartRows.length === 0) {
+		      alert("Please select items to place your order.");
+		    } else {
+		      window.location.href = "/orders";
+		    }
+		  }
+</script>
+<link rel="stylesheet" href="/css/theme-toggle.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#ff6f61">
+<link rel="apple-touch-icon" href="/images/icon-192.png">
+</head>
+<body>
+<div class="container-fluid px-3 px-md-4">
+	<main>
+		<h1>Your Cart</h1>
+
+		<div class="button-row">
+			<a th:href="@{/home}"><button>back</button></a> <!--<a th:href="@{/home}"><button>back</button></a> -->
+			    <a th:href="@{/clear}"
+       onclick="return confirm('Are you sure you want to clear the entire cart?');">
+        <button type="button">Clear Cart</button>
+    </a>
+		</div>
+
+
+		<table>
+			<thead>
+				<tr>
+					<th>Item</th>
+					<th>Quantity</th>
+					<th>Price (₹)</th>
+					<th>Category</th>
+					<th>Total (₹)</th>
+					<th>Action</th>
+				</tr>
+			</thead>
+
+			<tbody>
+				<tr th:each="item : ${cartItems}">
+					<td th:text="${item.name}"></td>
+					<td th:text="${item.quantity}"></td>
+					<td th:text="${item.price}"></td>
+					<td th:text="${item.category}"></td>
+					<td th:text="${item.total}"></td>
+					<td><a th:href="@{/cart/remove/{sno}(sno=${item.sno})}"
+						class="remove-link" th:attr="data-itemname=${item.name}"
+						onclick="confirmRemoval(event, this.getAttribute('data-itemname'))">
+							Remove </a></td>
+
+				</tr>
+			</tbody>
+
+			<tfoot>
+				<tr>
+					<td colspan="3" style="text-align: right; font-weight: bold;">Total
+						Amount :</td>
+					<td th:text="${orginaltotalAmount}">0.00</td>
+					<!--  
+					<td style="text-align: right">Discount :</td>
+					<td th:text="${discount}">0.00</td> -->
+				</tr>
+			</tfoot>
+		</table>
+
+		<!--  
+		
+
+		<form th:action="@{/cart-process}" method="post">
+			<button type="submit">Apply ₹50 Discount</button>
+		</form>
+
+		<form th:action="@{/cart/place-order}" method="post">
+			<label for="paymentMode">Payment Mode:</label> <select
+				name="paymentMode" id="paymentMode">
+				<option value="atm">ATM Card</option>
+				<option value="qr">QR Code</option>
+			</select>
+			<button type="submit">Place Order</button>
+		</form>
+-->
+		<section class="summary-section">
+			<h2>
+				Now your Total Balance is : <span th:text="${totalAmount}">0.00</span>
+			</h2>
+			<h5>
+				Placed on <span>
+					<button onclick="checkCartAndPlaceOrder()">Order</button>
+				</span>
+			</h5>
+		</section>
+	</main>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</div>
+<script src="/js/theme-toggle.js"></script>
+<script src="/js/pwa-init.js"></script>
+</body>
+</html>

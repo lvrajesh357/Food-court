@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Order Confirmed!</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    overflow: hidden;
+    background: linear-gradient(-45deg, #2b0a3d, #4a0f5c, #6b0f3a, #2b0a3d);
+    background-size: 400% 400%;
+    animation: gradientShift 8s ease infinite;
+    font-family: Arial, sans-serif;
+    color: white;
+  }
+
+  @keyframes gradientShift {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+
+  #confetti-canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+  }
+
+  .food-float {
+    position: fixed;
+    bottom: -60px;
+    font-size: 2rem;
+    z-index: 1;
+    animation: floatUp linear forwards;
+    pointer-events: none;
+  }
+
+  @keyframes floatUp {
+    0%   { transform: translateY(0) rotate(0deg); opacity: 0; }
+    10%  { opacity: 1; }
+    90%  { opacity: 1; }
+    100% { transform: translateY(-110vh) rotate(360deg); opacity: 0; }
+  }
+
+  .celebration-content {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    text-align: center;
+    padding: 1rem;
+  }
+
+  .celebration-glow-ring {
+    position: relative;
+    width: 140px;
+    height: 140px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle, rgba(255,215,0,0.35) 0%, rgba(255,215,0,0) 70%);
+    animation: pulseRing 1.6s ease-in-out infinite;
+  }
+
+  @keyframes pulseRing {
+    0%, 100% { transform: scale(1); }
+    50%      { transform: scale(1.15); }
+  }
+
+  .celebration-emoji {
+    font-size: 4rem;
+    animation: bounce 0.6s ease-in-out infinite alternate;
+  }
+
+  @keyframes bounce {
+    from { transform: translateY(0); }
+    to   { transform: translateY(-18px); }
+  }
+
+  .celebration-title {
+    font-size: 2.1rem;
+    font-weight: bold;
+    margin: 0.6rem 0;
+    background: linear-gradient(90deg, #ffd700, #fff7c2, #ffd700);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shimmer 2.5s linear infinite;
+    text-shadow: 0 0 18px rgba(255, 215, 0, 0.5);
+  }
+
+  @keyframes shimmer {
+    0%   { background-position: 0% center; }
+    100% { background-position: 200% center; }
+  }
+
+  .celebration-sub {
+    font-size: 1.1rem;
+    opacity: 0.9;
+  }
+
+  .celebration-countdown {
+    margin-top: 1.5rem;
+    font-size: 0.95rem;
+    opacity: 0.75;
+  }
+
+  .celebration-skip {
+    margin-top: 1rem;
+  }
+
+  @media (max-width: 576px) {
+    .celebration-title { font-size: 1.5rem; }
+    .celebration-emoji { font-size: 3rem; }
+    .celebration-glow-ring { width: 110px; height: 110px; }
+  }
+</style>
+<link rel="stylesheet" href="/css/theme-toggle.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#ff6f61">
+<link rel="apple-touch-icon" href="/images/icon-192.png">
+</head>
+<body>
+
+<canvas id="confetti-canvas"></canvas>
+
+<div class="celebration-content">
+  <div class="celebration-glow-ring">
+    <div class="celebration-emoji">🎉</div>
+  </div>
+  <div class="celebration-title">Order Placed Successfully!</div>
+  <div class="celebration-sub">
+    Thank you, <span th:text="${username}">Customer</span>! Your order of
+    ₹<span th:text="${amount}">0.00</span> is confirmed.
+  </div>
+  <div class="celebration-countdown">
+    Redirecting to your delivery status in <span id="countdown">10</span> seconds...
+  </div>
+  <div class="celebration-skip">
+    <a th:href="@{/delivery}" class="btn btn-light btn-sm">Skip &amp; view delivery status now</a>
+  </div>
+</div>
+
+<script>
+  // ---- Confetti + cracker particle animation (self-contained, no external libs) ----
+  const canvas = document.getElementById('confetti-canvas');
+  const ctx = canvas.getContext('2d');
+  let width, height;
+
+  function resize() {
+    width = canvas.width = window.innerWidth;
+    height = canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  const colors = ['#ff595e', '#ffca3a', '#8ac926', '#1982c4', '#6a4c93', '#ff924c', '#ffffff'];
+
+  function randomBetween(min, max) {
+    return Math.random() * (max - min) + min;
+  }
+
+  // Falling confetti pieces
+  const confetti = Array.from({ length: 160 }, () => ({
+    x: randomBetween(0, width),
+    y: randomBetween(-height, 0),
+    size: randomBetween(6, 12),
+    speedY: randomBetween(2, 5),
+    speedX: randomBetween(-1.5, 1.5),
+    rotation: randomBetween(0, 360),
+    rotationSpeed: randomBetween(-8, 8),
+    color: colors[Math.floor(Math.random() * colors.length)],
+    shape: Math.random() > 0.5 ? 'rect' : 'circle'
+  }));
+
+  // Cracker/firework burst particles
+  let bursts = [];
+  function spawnBurst() {
+    const cx = randomBetween(width * 0.15, width * 0.85);
+    const cy = randomBetween(height * 0.15, height * 0.5);
+    const particleCount = 40;
+    const burst = [];
+    for (let i = 0; i < particleCount; i++) {
+      const angle = (Math.PI * 2 * i) / particleCount;
+      const speed = randomBetween(2, 6);
+      burst.push({
+        x: cx,
+        y: cy,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 60,
+        color: colors[Math.floor(Math.random() * colors.length)]
+      });
+    }
+    bursts.push(burst);
+  }
+
+  let burstTimer = setInterval(spawnBurst, 700);
+
+  // ---- Rising food emojis - a food-app-specific touch, floating up through
+  // the confetti like little celebratory snacks. ----
+  const foodEmojis = ['🍕', '🍔', '🍟', '🍗', '🍜', '🍰', '🥤', '🍛', '🍩'];
+  function spawnFoodEmoji() {
+    const el = document.createElement('div');
+    el.className = 'food-float';
+    el.textContent = foodEmojis[Math.floor(Math.random() * foodEmojis.length)];
+    el.style.left = randomBetween(5, 95) + 'vw';
+    const duration = randomBetween(5, 9);
+    el.style.animationDuration = duration + 's';
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), duration * 1000 + 200);
+  }
+  let foodTimer = setInterval(spawnFoodEmoji, 500);
+
+  function draw() {
+    ctx.clearRect(0, 0, width, height);
+
+    // Falling confetti
+    confetti.forEach(p => {
+      p.y += p.speedY;
+      p.x += p.speedX;
+      p.rotation += p.rotationSpeed;
+      if (p.y > height) {
+        p.y = randomBetween(-40, 0);
+        p.x = randomBetween(0, width);
+      }
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate((p.rotation * Math.PI) / 180);
+      ctx.fillStyle = p.color;
+      if (p.shape === 'rect') {
+        ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
+      } else {
+        ctx.beginPath();
+        ctx.arc(0, 0, p.size / 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    });
+
+    // Cracker bursts
+    bursts.forEach(burst => {
+      burst.forEach(p => {
+        if (p.life <= 0) return;
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.06; // gravity
+        p.life -= 1;
+        ctx.globalAlpha = Math.max(p.life / 60, 0);
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      });
+    });
+    bursts = bursts.filter(burst => burst.some(p => p.life > 0));
+
+    requestAnimationFrame(draw);
+  }
+  draw();
+
+  // ---- 10 second countdown, then auto-redirect to the delivery page ----
+  let secondsLeft = 10;
+  const countdownEl = document.getElementById('countdown');
+  const timerId = setInterval(() => {
+    secondsLeft -= 1;
+    if (countdownEl) countdownEl.textContent = secondsLeft;
+    if (secondsLeft <= 0) {
+      clearInterval(timerId);
+      clearInterval(burstTimer);
+      clearInterval(foodTimer);
+      window.location.href = /*[[@{/delivery}]]*/ '/delivery';
+    }
+  }, 1000);
+</script>
+
+<script src="/js/theme-toggle.js"></script>
+<script src="/js/pwa-init.js"></script>
+</body>
+</html>

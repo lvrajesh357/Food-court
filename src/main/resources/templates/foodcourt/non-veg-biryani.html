@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+  /* Mobile-friendly tweaks on top of Bootstrap */
+  body { padding-left: 0; padding-right: 0; }
+  table { max-width: 100%; }
+  .table-responsive-wrap { overflow-x: auto; }
+  img { max-width: 100%; height: auto; }
+  @media (max-width: 576px) {
+    h1 { font-size: 1.5rem; }
+    h2 { font-size: 1.25rem; }
+    .payment-option { width: 100% !important; }
+    .form-group input, .form-group select { width: 100% !important; box-sizing: border-box; }
+  }
+</style>
+<meta charset="UTF-8">
+<title>Insert title here</title>
+
+ <link th:href="@{/css/nonvegbiryani.css}" rel="stylesheet" />
+<link rel="stylesheet" href="/css/theme-toggle.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#ff6f61">
+<link rel="apple-touch-icon" href="/images/icon-192.png">
+</head>
+
+ 
+<script>
+  let cart = [];
+
+  function updatePrice(card) {
+    const rateLabel = card.querySelector('.rate-label');
+    const quantity = parseInt(card.dataset.quantity || '1');
+    const category = card.dataset.category || 'Unknown';
+    const price = parseInt(rateLabel.dataset.price || '0');
+    const quantityDisplay = card.querySelector('.quantity');
+    if (quantityDisplay) quantityDisplay.textContent = quantity;
+    rateLabel.textContent = (quantity * price) + ' /-';
+  }
+
+  function increment(element) {
+    const card = element.closest('.card');
+    let quantity = parseInt(card.dataset.quantity || '1');
+    quantity++;
+    card.dataset.quantity = quantity;
+    updatePrice(card);
+  }
+
+  function decrement(element) {
+    const card = element.closest('.card');
+    let quantity = parseInt(card.dataset.quantity || '1');
+    if (quantity > 1) {
+      quantity--;
+      card.dataset.quantity = quantity;
+      updatePrice(card);
+    }
+  }
+
+  function placeorder(button) {
+	    let card = button.parentElement;
+	    while (card && !card.classList.contains('card')) {
+	        card = card.parentElement;
+	    }
+
+	    if (!card) {
+	        console.error("Could not find card element.");
+	        return;
+	    }
+
+	    const nameElem = card.querySelector('.itemname');
+	    const name = nameElem.textContent.trim();
+	    const quantity = parseInt(card.dataset.quantity || '1');
+	    const rateLabel = card.querySelector('.rate-label');
+	    const pricePerItem = parseInt(rateLabel.dataset.price || '0');
+	    const totalPrice = pricePerItem * quantity;
+	    const category = card.dataset.category;
+
+	    // Toggle: if this item is already in the cart, this click removes it instead.
+	    if (card.dataset.inCart === 'true') {
+	        fetch('/cart/remove-by-name', {
+	            method: 'POST',
+	            headers: { 'Content-Type': 'application/json' },
+	            body: JSON.stringify({ name: name })
+	        }).then(response => {
+	            if (response.ok) {
+	                card.dataset.inCart = 'false';
+	                button.textContent = 'Order';
+	            } else {
+	                console.error("Failed to remove item from cart:", name);
+	            }
+	        });
+	        return;
+	    }
+
+	    fetch('/cart/add-to-session', {
+	        method: 'POST',
+	        headers: {
+	            'Content-Type': 'application/json'
+	        },
+	        body: JSON.stringify({
+	            name: name,
+	            quantity: quantity,
+	            category: category,
+	            price: pricePerItem
+	        })
+	    }).then(response => {
+	        if (response.ok) {
+	            card.dataset.inCart = 'true';
+	            button.textContent = 'Remove';
+	        } else {
+	            console.error("Failed to add item to cart:", name);
+	        }
+	    });
+	}
+
+  function updateCartCount() {
+	    fetch('/cart/count')
+	        .then(response => response.json())
+	        .then(count => {
+	            const cartCount = document.getElementById('cart-count');
+
+	            if (cartCount) {
+	                cartCount.textContent = count;
+	            }
+	        })
+	        .catch(error => console.error(error));
+	}
+  
+</script>
+<body>
+<div class="container-fluid px-3 px-md-4">
+
+    <h2>Welcome to FoodCourt! <span th:text="${username}"></span></h2>
+    
+       <nav>
+        <ul>
+        <li><p class="text">VarmaStyle</p></li>
+   <li><a th:href="@{/home}"><img alt="Logo" src="images/vslogo.jpeg" class="logo"></a></li>
+      <li><a th:href="@{/veg-currys}">Veg-Items</a></li>
+            <li><a th:href="@{/non-veg-currys}">Non-Veg Items</a></li>
+            <li><a th:href="@{/snacks}">starters</a></li>
+            <li><a th:href="@{/veg-biryanis}">Veg-Biryani's</a></li>
+            <li><a th:href="@{/non-veg-biryanis}">Non-Veg-Biryani's</a></li>
+            <li><a th:href="@{/cart}">Cart</a>
+          <!--  <li><a th:href="@{/orders}">Orders</a></li>  -->
+        
+            <li>
+                <a href="https://www.google.com/maps" target="_blank">
+                    <img class="map" src="images/maps.jpeg" alt="Map">
+                </a>
+            </li>
+            <li><a th:href="@{/logout}">Logout</a></li>
+        </ul>
+    </nav>
+
+
+
+ <div class="container">
+<div class="card" data-category="Non Veg Biryani">
+<div class="veg1">
+<a href="#" onclick="askName()"  rel="non veg" >
+<img src="images/chicken-dum-biryani.jpg" alt="vegzz">
+</a>
+<div class="itemname">Chicken Dum Biryani</div>
+<div class="rating-box">
+<!--  <span class="quantity">0</span>  -->
+<span class="symbol"  onclick="decrement(this)">−</span>
+   <span class="rate-label" data-price="160">160 /-</span>
+   <span class="symbol" onclick="increment(this)">+</span>
+</div>
+<div class="button"><button  onclick="placeorder(this)">order</button></div>
+</div>
+</div>
+
+<div class="card" data-category="Non Veg Biryani">
+<div class="veg1">
+<a href="#" onclick="askName()"  rel="Non veg" >
+<img src="images/mutton-dum-biryani.jpg" alt="vegzz">
+</a>
+<div class="itemname">Mutton Dum Biryani</div>
+<div class="rating-box">
+<span class="symbol"  onclick="decrement(this)">−</span>
+   <span class="rate-label" data-price="270">270 /-</span>
+   <span class="symbol" onclick="increment(this)">+</span>
+</div>
+<div class="button"><button onclick="placeorder(this)">order</button></div>
+</div>
+</div>
+
+<div class="card" data-category="Non Veg Biryani">
+<div class="veg1">
+<a href="#" onclick="askName()"  rel="Non veg" >
+<img src="images/prawns-dum-biryani.jpg" alt="vegzz">
+</a>
+<div class="itemname">prawns Dum Biryani</div>
+<div class="rating-box">
+<span class="symbol"  onclick="decrement(this)">−</span>
+   <span class="rate-label" data-price="250">250 /-</span>
+   <span class="symbol" onclick="increment(this)">+</span>
+</div>
+<div class="button"><button onclick="placeorder(this)">order</button></div>
+</div>
+</div>
+
+<div class="card" data-category="Non Veg Biryani">
+<div class="veg1">
+<a href="#" onclick="askName()"  rel="Non veg" >
+<img src="images/fish-dum-biryani.jpg" alt="vegzz">
+</a>
+<div class="itemname">Fish Dum Biryani</div>
+<div class="rating-box">
+<span class="symbol"  onclick="decrement(this)">−</span>
+   <span class="rate-label" data-price="250">250 /-</span>
+   <span class="symbol" onclick="increment(this)">+</span>
+</div>
+<div class="button"><button onclick="placeorder(this)">order</button></div>
+</div>
+</div>
+
+<div class="card" data-category="Non Veg Biryani">
+<div class="veg1">
+<a href="#" onclick="askName()"  rel="Non veg" >
+<img src="images/egg-biryani.jpg" alt="vegzz">
+</a>
+<div class="itemname">Egg Dum Biryani</div>
+<div class="rating-box">
+<span class="symbol"  onclick="decrement(this)">−</span>
+   <span class="rate-label" data-price="130">130 /-</span>
+   <span class="symbol" onclick="increment(this)">+</span>
+</div>
+<div class="button"><button onclick="placeorder(this)">order</button></div>
+</div>
+</div>
+    </div>
+    
+    
+    
+    <div class="container">
+<div class="card" data-category="Non Veg Biryani">
+<div class="veg1">
+<a href="#" onclick="askName()"  rel="Non veg" >
+<img src="images/beef-dum-biryani.jpg" alt="vegzz">
+</a>
+<div class="itemname">Beef Dum Biryani</div>
+<div class="rating-box">
+<span class="symbol"  onclick="decrement(this)">−</span>
+   <span class="rate-label" data-price="220">220 /-</span>
+   <span class="symbol" onclick="increment(this)">+</span>
+</div>
+<div class="button"><button onclick="placeorder(this)">order</button></div>
+</div>
+</div>
+
+<div class="card" data-category="Non Veg Biryani">
+<div class="veg1">
+<a href="#" onclick="askName()"  rel="Non veg" >
+<img src="images/chicken-fry-biryani.jpg" alt="vegzz">
+</a>
+<div class="itemname">chicken fry piece  Biryani</div>
+<div class="rating-box">
+<span class="symbol"  onclick="decrement(this)">−</span>
+   <span class="rate-label" data-price="200">200 /-</span>
+   <span class="symbol" onclick="increment(this)">+</span>
+</div>
+<div class="button"><button onclick="placeorder(this)">order</button></div>
+</div>
+</div>
+
+<div class="card" data-category="Non Veg Biryani">
+<div class="veg1">
+<a href="#" onclick="askName()"  rel="Non veg" >
+<img src="images/chicken-keema-biryani.jpeg" alt="vegzz">
+</a>
+<div class="itemname">Chicken Kheema Biryani</div>
+<div class="rating-box">
+<span class="symbol"  onclick="decrement(this)">−</span>
+   <span class="rate-label" data-price="200">200 /-</span>
+   <span class="symbol" onclick="increment(this)">+</span>
+</div>
+<div class="button"><button onclick="placeorder(this)">order</button></div>
+</div>
+</div>
+
+<div class="card" data-category="Non Veg Biryani">
+<div class="veg1">
+<a href="#" onclick="askName()"  rel="Non veg" >
+<img src="images/mutton-keema-biryani.jpeg" alt="vegzz">
+</a>
+<div class="itemname">Mutton Kheema Biryani </div>
+<div class="rating-box">
+<span class="symbol"  onclick="decrement(this)">−</span>
+   <span class="rate-label" data-price="270">270 /-</span>
+   <span class="symbol" onclick="increment(this)">+</span>
+</div>
+<div class="button"><button onclick="placeorder(this)">order</button></div>
+</div>
+</div>
+
+<div class="card" data-category="Non Veg Biryani">
+<div class="veg1">
+<a href="#" onclick="askName()"  rel="Non veg" >
+<img src="images/mutton-fry-biryani.jpg" alt="vegzz">
+</a>
+<div class="itemname">Mutton Fry piece Biryani</div>
+<div class="rating-box">
+<span class="symbol"  onclick="decrement(this)">−</span>
+   <span class="rate-label" data-price="300">300 /-</span>
+   <span class="symbol" onclick="increment(this)">+</span>
+</div>
+<div class="button"><button onclick="placeorder(this)">order</button></div>
+</div>
+</div>
+    </div>
+    
+    
+    <div class="container">
+<div class="card" data-category="Non Veg Biryani">
+<div class="veg1">
+<a href="#" onclick="askName()"  rel="Non veg" >
+<img src="images/mandi-biryani.jpg" alt="vegzz">
+</a>
+<div class="itemname">Mandi-chicken</div>
+<div class="rating-box">
+<span class="symbol"  onclick="decrement(this)">−</span>
+   <span class="rate-label" data-price="480">480 /-</span>
+   <span class="symbol" onclick="increment(this)">+</span>
+</div>
+<div class="button"><button onclick="placeorder(this)">order</button></div>
+</div>
+</div>
+
+<div class="card" data-category="Non Veg Biryani">
+<div class="veg1">
+<a href="#" onclick="askName()"  rel="Non veg" >
+<img src="images/mandi-biryani.jpg" alt="vegzz">
+</a>
+<div class="itemname">Mandi-Mutton</div>
+<div class="rating-box">
+<span class="symbol"  onclick="decrement(this)">−</span>
+   <span class="rate-label" data-price="550">550 /-</span>
+   <span class="symbol" onclick="increment(this)">+</span>
+</div>
+<div class="button"><button onclick="placeorder(this)">order</button></div>
+</div>
+</div>
+
+<div class="card" data-category="Non Veg Biryani">
+<div class="veg1">
+<a href="#" onclick="askName()"  rel="Non veg" >
+<img src="images/Mutton-Pot-Biryani.jpeg" alt="vegzz">
+</a>
+<div class="itemname">Mutton Pot Biryani</div>
+<div class="rating-box">
+<span class="symbol"  onclick="decrement(this)">−</span>
+   <span class="rate-label" data-price="300">300 /-</span>
+   <span class="symbol" onclick="increment(this)">+</span>
+</div>
+<div class="button"><button onclick="placeorder(this)">order</button></div>
+</div>
+</div>
+
+<div class="card" data-category="Non Veg Biryani">
+<div class="veg1">
+<a href="#" onclick="askName()"  rel="Non veg" >
+<img src="images/chicken-pot-biryani.webp" alt="vegzz">
+</a>
+<div class="itemname">chicken Pot Biryani</div>
+<div class="rating-box">
+<span class="symbol"  onclick="decrement(this)">−</span>
+   <span class="rate-label" data-price="250">250 /-</span>
+   <span class="symbol" onclick="increment(this)">+</span>
+</div>
+<div class="button"><button onclick="placeorder(this)">order</button></div>
+</div>
+</div>
+
+<div class="card" data-category="Non Veg Biryani">
+<div class="veg1">
+<a href="#" onclick="askName()"  rel="Non veg" >
+<img src="images/butter-chicken-biryani.jpg" alt="vegzz">
+</a>
+<div class="itemname">Butter chicken Dum Biryani</div>
+<div class="rating-box">
+<span class="symbol"  onclick="decrement(this)">−</span>
+   <span class="rate-label" data-price="250">250 /-</span>
+   <span class="symbol" onclick="increment(this)">+</span>
+</div>
+<div class="button"><button onclick="placeorder(this)">order</button></div>
+</div>
+</div>
+    </div>
+    
+ 
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</div>
+<script src="/js/theme-toggle.js"></script>
+<script src="/js/pwa-init.js"></script>
+</body>
+</html>

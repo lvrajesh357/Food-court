@@ -1,0 +1,108 @@
+/* ==========================================================================
+   Theme toggle button + dark mode overlay.
+   IMPORTANT: nothing in this file modifies any page's existing CSS rules.
+   Every dark-mode rule below is scoped under "body.dark-mode" so it only
+   ever applies when that class is present, and higher specificity (+ a few
+   !important flags) lets it override each page's own baked-in colors
+   without editing a single line of the original stylesheets.
+   ========================================================================== */
+
+.theme-toggle-btn {
+  cursor: pointer;
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  line-height: 1;
+  padding: 0.25rem 0.6rem;
+  transition: transform 0.2s ease;
+}
+.theme-toggle-btn:hover {
+  transform: scale(1.15);
+}
+.theme-toggle-btn.floating {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 50%;
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.pwa-install-btn {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  background: linear-gradient(90deg, #ff9a44, #ff6f61);
+  color: #fff;
+  border: none;
+  border-radius: 30px;
+  padding: 0.6rem 1.3rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  box-shadow: 0 4px 14px rgba(255, 111, 97, 0.5);
+  cursor: pointer;
+}
+.pwa-install-btn:hover {
+  opacity: 0.92;
+}
+
+/* ================= DARK MODE OVERRIDES ================= */
+
+body.dark-mode {
+  background-color: #121212 !important;
+  color: #e8e8e8 !important;
+}
+
+body.dark-mode .card,
+body.dark-mode .login-card,
+body.dark-mode .register-card,
+body.dark-mode .delivery-card,
+body.dark-mode .container,
+body.dark-mode .payment-section,
+body.dark-mode .delivery-wrapper,
+body.dark-mode .msg-box {
+  background-color: #1e1e1e !important;
+  color: #e8e8e8 !important;
+  border-color: #333 !important;
+}
+
+body.dark-mode table,
+body.dark-mode th,
+body.dark-mode td {
+  background-color: #1a1a1a !important;
+  color: #e8e8e8 !important;
+  border-color: #333 !important;
+}
+
+body.dark-mode input,
+body.dark-mode select,
+body.dark-mode textarea {
+  background-color: #2a2a2a !important;
+  color: #e8e8e8 !important;
+  border-color: #444 !important;
+}
+
+body.dark-mode a {
+  color: #4db8ff !important;
+}
+
+body.dark-mode nav,
+body.dark-mode .navbar {
+  background-color: #181818 !important;
+}
+
+body.dark-mode button:not(.theme-toggle-btn) {
+  filter: brightness(0.92);
+}
+
+body.dark-mode hr {
+  border-color: #333 !important;
+}
