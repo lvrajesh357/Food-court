@@ -36,16 +36,16 @@
 
 .pwa-install-btn {
   position: fixed;
-  bottom: 18px;
-  left: 50%;
-  transform: translateX(-50%);
+  bottom: 14px;
+  right: 14px; /* tucked into the corner so it never covers centred footer text */
+  left: auto;
   z-index: 9999;
   background: linear-gradient(90deg, #ff9a44, #ff6f61);
   color: #fff;
   border: none;
   border-radius: 30px;
-  padding: 0.6rem 1.3rem;
-  font-size: 0.9rem;
+  padding: 0.45rem 1rem;
+  font-size: 0.8rem;
   font-weight: 700;
   box-shadow: 0 4px 14px rgba(255, 111, 97, 0.5);
   cursor: pointer;
@@ -105,4 +105,20 @@ body.dark-mode button:not(.theme-toggle-btn) {
 
 body.dark-mode hr {
   border-color: #333 !important;
+}
+
+/* Live cart counter in the navbar (see /js/cart-badge.js) */
+.cart-count-label {
+  font-size: 0.85em;
+  color: #ffd23f;
+  font-weight: 600;
+}
+.cart-count-pop {
+  display: inline-block;
+  animation: cartPop 0.45s ease;
+}
+@keyframes cartPop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.35); }
+  100% { transform: scale(1); }
 }

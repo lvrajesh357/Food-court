@@ -426,6 +426,7 @@ function applyCoupon() {
         document.getElementById("cancelBtn").style.display = "inline";
 
         couponApplied = true;
+        if (window.celebrate) window.celebrate(); // 🎉 colour-paper celebration
         alert("✅ Coupon applied successfully!");
 
         const tier = getDiscountTier(originalAmount);
@@ -764,5 +765,25 @@ function sendMessage(callback) {
 </div>
 <script src="/js/theme-toggle.js"></script>
 <script src="/js/pwa-init.js"></script>
+<script src="/js/confetti.js"></script>
+<script th:inline="javascript">
+// Celebrate when the order already carries a discount (bill-based discount from the
+// cart, or a coupon that was applied earlier). Guarded so a page refresh doesn't
+// replay it endlessly - it fires once per distinct discount per browser session.
+document.addEventListener("DOMContentLoaded", function () {
+    var billDiscount = parseFloat(/*[[${discount}]]*/ 0) || 0;
+    var couponDiscount = parseFloat(/*[[${coupon}]]*/ 0) || 0;
+    var total = billDiscount + couponDiscount;
+    if (total <= 0) return;
+
+    var key = "celebrated-discount-" + total.toFixed(2);
+    try {
+        if (sessionStorage.getItem(key)) return;
+        sessionStorage.setItem(key, "1");
+    } catch (e) { /* storage blocked - just celebrate */ }
+
+    setTimeout(function () { if (window.celebrate) window.celebrate(); }, 400);
+});
+</script>
 </body>
 </html>

@@ -87,6 +87,7 @@
 	            if (response.ok) {
 	                card.dataset.inCart = 'false';
 	                button.textContent = 'Order';
+	                if (window.refreshCartCount) window.refreshCartCount();
 	            } else {
 	                console.error("Failed to remove item from cart:", name);
 	            }
@@ -109,6 +110,7 @@
 	        if (response.ok) {
 	            card.dataset.inCart = 'true';
 	            button.textContent = 'Remove';
+	            if (window.refreshCartCount) window.refreshCartCount();
 	        } else {
 	            console.error("Failed to add item to cart:", name);
 	        }
@@ -397,5 +399,6 @@
 </div>
 <script src="/js/theme-toggle.js"></script>
 <script src="/js/pwa-init.js"></script>
+<script src="/js/cart-badge.js"></script>
 </body>
 </html>

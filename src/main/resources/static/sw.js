@@ -1,4 +1,4 @@
-const CACHE_NAME = 'foodcourt-static-v1';
+const CACHE_NAME = 'foodcourt-static-v2';
 const STATIC_ASSETS = [
   '/css/theme-toggle.css',
   '/js/theme-toggle.js',
