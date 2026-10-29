@@ -1,3 +1,4 @@
+
 package com.currypoint.services;
 
 import org.slf4j.Logger;
@@ -34,13 +35,14 @@ public class EmailServiceimp implements EmailService {
             message.setSubject(subject);
             message.setText(body);
 
+            log.info("Attempting to send email to {}", to);
+
             mailSender.send(message);
 
-            log.info("Email sending completed");
+            log.info("Email sending completed to {}", to);
 
         } catch (Exception e) {
-            // Do not log OTPs, email passwords, or message bodies.
-            log.error("Email sending failed: {}", e.getMessage());
+            log.error("Email sending failed to {}", to, e);
         }
     }
 }

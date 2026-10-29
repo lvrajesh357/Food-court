@@ -373,21 +373,39 @@ function handleSubmit(event) {
 
 let couponApplied = false;
 
+
 function applyCoupon() {
-    const couponInput = document.getElementById("coupon").value.trim().toLowerCase();
+    const couponInput = document
+        .getElementById("coupon")
+        .value.trim().toLowerCase();
+
+    const originalAmountEl = document.getElementById("originalAmount");
     const finalAmountElement = document.getElementById("finalAmount");
     const couponAmountElement = document.getElementById("couponAmount");
     const hiddenAmountInput = document.querySelector('input[name="amount"]');
-    const paymentSelected = document.querySelector('input[name="paymentMode"]:checked');
+    const paymentSelected = document.querySelector(
+        'input[name="paymentMode"]:checked'
+    );
 
-    // FIX: Make sure originalAmount is parsed safely
-    const originalAmountEl = document.getElementById("originalAmount");
-    const originalAmountAttr = originalAmountEl.getAttribute("data-original");
-    const originalAmount = parseFloat(originalAmountAttr);
+    // Read the original cart amount
+    const originalAmount = parseFloat(
+        originalAmountEl?.getAttribute("data-original")
+    );
 
-    // Validate values
-    if (isNaN(originalAmount)) {
-        alert("❌ Error: Original amount is invalid or missing.");
+    // Read the existing regular discount
+    const regularDiscountElement = document.getElementById("discount");
+    const regularDiscount = parseFloat(
+        regularDiscountElement?.textContent
+    );
+
+    // Validate amounts
+    if (
+        !Number.isFinite(originalAmount) ||
+        !Number.isFinite(regularDiscount) ||
+        originalAmount < 0 ||
+        regularDiscount < 0
+    ) {
+        alert("❌ Original amount or regular discount is invalid.");
         return;
     }
 
@@ -401,43 +419,77 @@ function applyCoupon() {
         return;
     }
 
-    let discount = 0;
-
-    if (couponInput === "coupon") {
-        if (originalAmount < 100) {
-            discount = originalAmount * 0.02;
-        } else if (originalAmount >= 100 && originalAmount < 1000) {
-            discount = originalAmount * 0.10;
-        } else if (originalAmount >= 1000 && originalAmount < 2500) {
-            discount = originalAmount * 0.30;
-        } else {
-            discount = originalAmount * 0.50;
-        }
-
-        const finalAmount = originalAmount - discount;
-
-        // Update UI
-        couponAmountElement.textContent = `${discount.toFixed(2)}`;
-        finalAmountElement.textContent = `${finalAmount.toFixed(2)}`;
-        hiddenAmountInput.value = finalAmount.toFixed(2);
-
-        document.getElementById("coupon").disabled = true;
-        document.getElementById("applyBtn").disabled = true;
-        document.getElementById("cancelBtn").style.display = "inline";
-
-        couponApplied = true;
-        if (window.celebrate) window.celebrate(); // 🎉 colour-paper celebration
-        alert("✅ Coupon applied successfully!");
-
-        const tier = getDiscountTier(originalAmount);
-        document.getElementById("discountTierMessage").textContent =
-            `✅ Coupon applied! You saved ₹${discount.toFixed(2)} (${tier.rateLabel} off).`;
-
-        refreshUpiQrCodes();
-    } else {
+    if (couponInput !== "coupon") {
         alert("❌ Invalid coupon code. Please try again.");
+        return;
     }
+
+    // Step 1: Subtract the regular discount first
+    const amountAfterRegularDiscount = Math.max(
+        0,
+        originalAmount - regularDiscount
+    );
+
+    // Step 2: Calculate the coupon discount
+    let discountRate;
+
+    if (amountAfterRegularDiscount < 100) {
+        discountRate = 0.02;
+    } else if (amountAfterRegularDiscount < 1000) {
+        discountRate = 0.10;
+    } else if (amountAfterRegularDiscount < 2500) {
+        discountRate = 0.30;
+    } else {
+        discountRate = 0.50;
+    }
+
+    // Round money to two decimal places
+    const discount = Math.round(
+        amountAfterRegularDiscount * discountRate * 100
+    ) / 100;
+
+    // Step 3: Calculate the final payable amount
+    const finalAmount = Math.max(
+        0,
+        Math.round(
+            (amountAfterRegularDiscount - discount) * 100
+        ) / 100
+    );
+
+   // Step 4: Update the page
+couponAmountElement.textContent = discount.toFixed(2);
+finalAmountElement.setAttribute(
+    "data-discounted",
+    finalAmount.toFixed(2)
+);
+
+finalAmountElement.setAttribute(
+    "data-discounted",
+    finalAmount.toFixed(2)
+);
+
+    // Prevent applying the coupon more than once
+    document.getElementById("coupon").disabled = true;
+    document.getElementById("applyBtn").disabled = true;
+    document.getElementById("cancelBtn").style.display = "inline";
+
+    couponApplied = true;
+
+    if (window.celebrate) {
+        window.celebrate();
+    }
+
+    const tier = getDiscountTier(amountAfterRegularDiscount);
+
+    document.getElementById("discountTierMessage").textContent =
+        `✅ Coupon applied! You saved ₹${discount.toFixed(2)} ` +
+        `(${tier.rateLabel} off).`;
+
+    refreshUpiQrCodes();
+
+    alert("✅ Coupon applied successfully!");
 }
+
 
 function updateCartCount() {
     fetch('/cart/count')
@@ -452,30 +504,40 @@ function updateCartCount() {
         .catch(error => console.error(error));
 }
 
+
 function cancelCoupon() {
-    const finalAmountElement = document.getElementById("finalAmount");
-    const couponAmountElement = document.getElementById("couponAmount");
-    const hiddenAmountInput = document.querySelector('input[name="amount"]');
+    const originalAmount = parseFloat(
+        document.getElementById("originalAmount")
+            .getAttribute("data-original")
+    );
 
-    // ✅ New: get backend-calculated discount (no coupon)
-    const discountedAmount = parseFloat(finalAmountElement.getAttribute("data-discounted"));
+    const regularDiscount = parseFloat(
+        document.getElementById("discount").textContent
+    );
 
-    couponAmountElement.textContent = "0.00";
-    finalAmountElement.textContent = `${discountedAmount.toFixed(2)}`;
-    hiddenAmountInput.value = discountedAmount.toFixed(2);
+    const amountWithoutCoupon = Math.max(
+        0,
+        originalAmount - regularDiscount
+    );
+
+    document.getElementById("couponAmount").textContent = "0.00";
+
+    document.getElementById("finalAmount").textContent =
+        amountWithoutCoupon.toFixed(2);
+
+    document.querySelector('input[name="amount"]').value =
+        amountWithoutCoupon.toFixed(2);
 
     document.getElementById("coupon").disabled = false;
-    document.getElementById("applyBtn").disabled = false;
     document.getElementById("coupon").value = "";
+    document.getElementById("applyBtn").disabled = false;
     document.getElementById("cancelBtn").style.display = "none";
 
     couponApplied = false;
+
     updateDiscountTierMessage();
     refreshUpiQrCodes();
 }
-
-
-
 
 
 function sendMessage(callback) {
@@ -521,8 +583,10 @@ function sendMessage(callback) {
 
 	<!-- Original Amount -->
 	<h2>
-		Original Amount: ₹<span id="originalAmount"
-			th:attr="data-original=${totalAmount}" th:text="${totalAmount}">0.00</span>
+		<input type="hidden" name="amount"
+       th:value="${finaltotalAmount}" />
+<input type="hidden" name="username"
+       th:value="${username}" />
 	</h2>
 
 	<!-- Discount -->
@@ -536,14 +600,16 @@ function sendMessage(callback) {
 
 	</h3>
 
-	<!-- Final Amount -->
-	<h1>
-		Final Amount: ₹ <span id="finalAmount"
-			th:text="${finaltotalAmount != null ? finaltotalAmount : totalAmount}"
-			th:attr="data-original=${totalAmount}, data-discounted=${finaltotalAmount != null ? finaltotalAmount : totalAmount}">
-			0.00 </span>
-	</h1>
 
+<!-- Final Amount -->
+<h1>
+    Final Amount: ₹
+    <span id="finalAmount"
+          th:text="${finaltotalAmount != null ? finaltotalAmount : totalAmount - discount}"
+          th:attr="data-discounted=${finaltotalAmount != null ? finaltotalAmount : totalAmount - discount}">
+        0.00
+    </span>
+</h1>
 
 
 
@@ -558,13 +624,13 @@ function sendMessage(callback) {
 			onsubmit="handleSubmit(event)">
 
 
-			<!-- PhonePe -->
+			<!-- UPI -->
 			<div class="payment-option">
 				<input type="radio" id="phonepe" name="paymentMode" value="phonepe"
-					onclick="showDetails('phonepe')"> <label for="phonepe">PhonePe</label>
+					onclick="showDetails('phonepe')"> <label for="phonepe">UPI</label>
 				<div class="details" id="phonepe-details">
 					<div id="phonepe-qrcode" class="upi-qrcode"></div>
-					<p class="upi-amount-hint">Scan with PhonePe — amount is filled automatically</p>
+					<p class="upi-amount-hint">Scan with UPI — amount is filled automatically</p>
 				<!-- 	<p class="text-center"><a id="phonepe-pay-link" href="#" class="btn btn-sm btn-success upi-pay-link">📱 On this phone? Tap to open PhonePe</a></p>
 				 	<p>
 						<label>After paying, enter the UPI Transaction ID / UTR shown in your PhonePe app (required):</label><br>
@@ -583,18 +649,18 @@ function sendMessage(callback) {
 				</div>
 			</div>
 
-			<!-- GPay -->
+			<!-- GPay 
 			<div class="payment-option">
 				<input type="radio" id="gpay" name="paymentMode" value="gpay"
 					onclick="showDetails('gpay')"> <label for="gpay">GPay</label>
 				<div class="details" id="gpay-details">
 					<div id="gpay-qrcode" class="upi-qrcode"></div>
 					<p class="upi-amount-hint">Scan with Google Pay — amount is filled automatically</p>
-				<!--  	<p class="text-center"><a id="gpay-pay-link" href="#" class="btn btn-sm btn-success upi-pay-link">📱 On this phone? Tap to open Google Pay</a></p>
+				  	<p class="text-center"><a id="gpay-pay-link" href="#" class="btn btn-sm btn-success upi-pay-link">📱 On this phone? Tap to open Google Pay</a></p>
 				 	<p>
 						<label>After paying, enter the UPI Transaction ID / UTR shown in your Google Pay app (required):</label><br>
 						<input type="text" name="upiTransactionId" class="upi-txn-input" placeholder="e.g. 123456789012">
-					</p>  -->
+					</p>  
 					<p>
 						<strong>Account No:</strong> 2549795706
 					</p>
@@ -604,18 +670,18 @@ function sendMessage(callback) {
 				</div>
 			</div>
 
-			<!-- Paytm -->
+			 Paytm
 			<div class="payment-option">
 				<input type="radio" id="paytm" name="paymentMode" value="paytm"
 					onclick="showDetails('paytm')"> <label for="paytm">Paytm</label>
 				<div class="details" id="paytm-details">
 					<div id="paytm-qrcode" class="upi-qrcode"></div>
 					<p class="upi-amount-hint">Scan with Paytm — amount is filled automatically</p>
-				<!-- 	<p class="text-center"><a id="paytm-pay-link" href="#" class="btn btn-sm btn-success upi-pay-link">📱 On this phone? Tap to open Paytm</a></p>
+					<p class="text-center"><a id="paytm-pay-link" href="#" class="btn btn-sm btn-success upi-pay-link">📱 On this phone? Tap to open Paytm</a></p>
 				  	<p>
 						<label>After paying, enter the UPI Transaction ID / UTR shown in your Paytm app (required):</label><br>
 						<input type="text" name="upiTransactionId" class="upi-txn-input" placeholder="e.g. 123456789012">
-					</p>  -->
+					</p> 
 					<p>
 						<strong>Account No:</strong> 2549795706
 					</p>
@@ -625,22 +691,22 @@ function sendMessage(callback) {
 				</div>
 			</div>
 
-			<!-- Any UPI app (generic - no specific app targeted, so any UPI app
-			     installed on the phone can open it; on desktop, scan the QR instead) -->
+			 Any UPI app (generic - no specific app targeted, so any UPI app
+			     installed on the phone can open it; on desktop, scan the QR instead) 
 			<div class="payment-option">
 				<input type="radio" id="anyupi" name="paymentMode" value="anyupi"
 					onclick="showDetails('anyupi')"> <label for="anyupi">Any UPI App</label>
 				<div class="details" id="anyupi-details">
 					<div id="anyupi-qrcode" class="upi-qrcode"></div>
-				<!--	<p class="upi-amount-hint">Scan with any UPI app — amount is filled automatically</p>
+					<p class="upi-amount-hint">Scan with any UPI app — amount is filled automatically</p>
 					<p class="text-center"><a id="anyupi-pay-link" href="#" class="btn btn-sm btn-success upi-pay-link">📱 On this phone? Tap to choose a UPI app</a></p>
 				  	<p>
 						<label>After paying, enter the UPI Transaction ID / UTR shown in your UPI app (required):</label><br>
 						<input type="text" name="upiTransactionId" class="upi-txn-input" placeholder="e.g. 123456789012">
-					</p>  -->
+					</p> 
 				</div>
 			</div>
-
+-->
 			<!-- Debit Card -->
 			<div class="payment-option">
 				<input type="radio" id="debit" name="paymentMode" value="debit"

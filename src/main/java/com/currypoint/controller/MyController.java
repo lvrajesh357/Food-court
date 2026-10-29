@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.ResponseEntity;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -424,6 +425,75 @@ public int getCartCount(HttpSession session) {
 		return "orders";
 	}
 
+	@PostMapping("/orders/send-otp")
+	@ResponseBody
+	public ResponseEntity<String> sendCheckoutOtp(
+	        @RequestParam String email,
+	        HttpSession session) {
+
+	    if (email == null ||
+	            !email.matches("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")) {
+	        return ResponseEntity.badRequest()
+	                .body("Enter a valid email address.");
+	    }
+
+	    email = email.trim().toLowerCase();
+
+	    // Limit sending to one OTP request per 60 seconds per session.
+	    Long lastSent = (Long) session.getAttribute("checkoutOtpLastSent");
+	    long now = System.currentTimeMillis();
+
+	    if (lastSent != null && now - lastSent < 60_000) {
+	        return ResponseEntity.status(429)
+	                .body("Please wait before requesting another OTP.");
+	    }
+
+	    try {
+	        otpService.generateAndSend(email);
+
+	        session.setAttribute("pendingOrderEmail", email);
+	        session.setAttribute("checkoutOtpLastSent", now);
+	        session.removeAttribute("verifiedOrderEmail");
+
+	        return ResponseEntity.ok(
+	                "OTP requested. Check your inbox and spam folder.");
+	    } catch (Exception e) {
+	        return ResponseEntity.internalServerError()
+	                .body("Unable to send OTP. Please try again.");
+	    }
+	}
+
+	@PostMapping("/orders/verify-otp")
+	@ResponseBody
+	public ResponseEntity<String> verifyCheckoutOtp(
+	        @RequestParam String email,
+	        @RequestParam String otp,
+	        HttpSession session) {
+
+	    String pendingEmail =
+	            (String) session.getAttribute("pendingOrderEmail");
+
+	    if (pendingEmail == null ||
+	            !pendingEmail.equalsIgnoreCase(email.trim())) {
+	        return ResponseEntity.badRequest()
+	                .body("Request an OTP for this email first.");
+	    }
+
+	    if (otp == null || !otp.matches("\\d{6}")) {
+	        return ResponseEntity.badRequest()
+	                .body("Enter the six-digit OTP.");
+	    }
+
+	    if (!otpService.verify(pendingEmail, otp)) {
+	        return ResponseEntity.badRequest()
+	                .body("Incorrect or expired OTP.");
+	    }
+
+	    session.setAttribute("verifiedOrderEmail", pendingEmail);
+
+	    return ResponseEntity.ok(
+	            "Email verified successfully. You can place your order.");
+	}
 	@GetMapping("/cart/remove/{sno}")
 	public String removeFromCart(@PathVariable int sno, HttpSession session) {
 		cartimp.removeItemFromSessionCart(session, sno);

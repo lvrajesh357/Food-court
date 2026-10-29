@@ -164,32 +164,33 @@ public class CartServiceImp implements CartService {
     
     
 
-	@Override
-	public double calculateCartTotal(HttpSession session) {
-	    List<Cart> cartItems = getCartFromSession(session);
-	    double total = 0.0;
+    @Override
+    public double calculateCartTotal(HttpSession session) {
+        List<Cart> cartItems = getCartFromSession(session);
 
-	    for (Cart item : cartItems) {
-	        total += item.getPrice() * item.getQuantity();
-	    }
+        double originalTotal = 0.0;
 
-	    double discountAmount = 0.0;
+        for (Cart item : cartItems) {
+            if (item.getQuantity() > 0 && item.getPrice() >= 0) {
+                originalTotal += item.getPrice() * item.getQuantity();
+            }
+        }
 
-	    if (total >= 2000) {
-	        discountAmount = total * 0.30;
-	    } else if (total >= 1500) {
-	        discountAmount = total * 0.15;
-	    } else if (total >= 1000) {
-	        discountAmount = total * 0.10;
-	    } else {
-	        discountAmount = 0.0; // explicitly no discount below 1000
-	    }
+        double discountAmount = 0.0;
 
-	    session.setAttribute("originalAmount", total);
-	    session.setAttribute("discountAmount", discountAmount);
+        if (originalTotal >= 2000) {
+            discountAmount = originalTotal * 0.30;
+        } else if (originalTotal >= 1500) {
+            discountAmount = originalTotal * 0.15;
+        } else if (originalTotal >= 1000) {
+            discountAmount = originalTotal * 0.10;
+        }
 
-	    return total ;
-	}
+        session.setAttribute("originalAmount", originalTotal);
+        session.setAttribute("discountAmount", discountAmount);
+
+        return originalTotal;
+    }
 
 	
 

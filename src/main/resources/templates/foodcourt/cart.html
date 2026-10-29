@@ -28,6 +28,7 @@ function removeFromCart(index) {
   .then(data => alert(data));
 }
 
+
 function updateCartCount() {
     fetch('/cart/count')
         .then(response => response.json())
@@ -183,11 +184,15 @@ h5 button:hover {
 </style>
 
 <script>
-	function confirmRemoval(event, itemName) {
-		// No confirmation prompt - removal happens immediately on click.
+function confirmRemoval(event, itemName) {
+	const cartRows = document.querySelectorAll("tbody tr");
+
+	if (cartRows.length === 0) {
+	    alert("Please select items to place your order.");
+	} else {
+	    window.location.href = "/orders";
 	}
-	
-	
+}
 	
 	
 	function addToCart(name, quantity, category, price) {
@@ -212,16 +217,18 @@ h5 button:hover {
 	}
 	
 
-	
-	
-	 function checkCartAndPlaceOrder() {
-		    const cartRows = document.querySelectorAll("tbody tr");
-		    if (cartRows.length === 0) {
-		      alert("Please select items to place your order.");
-		    } else {
-		      window.location.href = "/orders";
-		    }
-		  }
+	function checkCartAndPlaceOrder() {
+	    const cartRows = document.querySelectorAll(
+	        "tbody tr"
+	    );
+
+	    if (cartRows.length === 0) {
+	        alert("Please add items to your cart first.");
+	        return;
+	    }
+
+	    window.location.href = "/orders";
+	}
 </script>
 <link rel="stylesheet" href="/css/theme-toggle.css">
 <link rel="manifest" href="/manifest.json">
@@ -268,17 +275,26 @@ h5 button:hover {
 
 				</tr>
 			</tbody>
+                  <tfoot>
+    <tr>
+        <td colspan="4" style="text-align: right; font-weight: bold;">
+            Original Total:
+        </td>
+        <td colspan="2"
+            th:text="${orginaltotalAmount}">
+            0.00
+        </td>
+    </tr>
 
-			<tfoot>
-				<tr>
-					<td colspan="3" style="text-align: right; font-weight: bold;">Total
-						Amount :</td>
-					<td th:text="${orginaltotalAmount}">0.00</td>
-					<!--  
-					<td style="text-align: right">Discount :</td>
-					<td th:text="${discount}">0.00</td> -->
-				</tr>
-			</tfoot>
+    <tr>
+        <td colspan="4" style="text-align: right; font-weight: bold;">
+            Discount:
+        </td>
+        <td colspan="2" th:text="${discount}">
+            0.00
+        </td>
+    </tr>
+</tfoot>
 		</table>
 
 		<!--  
