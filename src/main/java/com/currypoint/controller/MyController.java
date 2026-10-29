@@ -481,34 +481,75 @@ public int getCartCount(HttpSession session) {
 	}
 
 	@PostMapping("/applyCoupon")
-	public String applyCoupon(@RequestParam double amount, @RequestParam String coupon, HttpSession session,
-			RedirectAttributes redirectAttributes) {
-		double couponDiscount = 0.0;
+	public String applyCoupon(
+	        @RequestParam String coupon,
+	        HttpSession session,
+	        RedirectAttributes redirectAttributes) {
 
-		if ("coupon".equalsIgnoreCase(coupon.trim())) {
-			if (amount < 100) {
-				couponDiscount = amount * 0.02;
-			} else if (amount >= 100 && amount < 1000) {
-				couponDiscount = amount * 0.10;
-			} else if (amount >= 1000 && amount < 2500) {
-				couponDiscount = amount * 0.30;
-			} else {
-				couponDiscount = amount * 0.50;
-			}
+	    String username = (String) session.getAttribute("username");
 
-			session.setAttribute("couponDiscount", couponDiscount);
-			session.setAttribute("couponUsed", true);
-			redirectAttributes.addFlashAttribute("couponMessage",
-					"✅ Coupon applied successfully! Discount: ₹" + String.format("%.2f", couponDiscount));
-		} else {
-			session.setAttribute("couponDiscount", 0.0);
-			session.setAttribute("couponUsed", false);
-			redirectAttributes.addFlashAttribute("couponMessage", "❌ Invalid coupon code.");
-		}
+	    if (username == null || username.isBlank()) {
+	        return "redirect:/login";
+	    }
 
-		return "redirect:/orders";
+	    if (coupon == null || !"coupon".equalsIgnoreCase(coupon.trim())) {
+	        session.setAttribute("couponDiscount", 0.0);
+	        session.setAttribute("couponUsed", false);
+
+	        redirectAttributes.addFlashAttribute(
+	                "couponMessage", "Invalid coupon code.");
+
+	        return "redirect:/orders";
+	    }
+
+	    // Calculate the actual cart total on the server.
+	    double originalAmount = cartService.calculateCartTotal(session);
+
+	    double regularDiscount = (Double) session.getAttribute("discountAmount");
+
+	    double amountAfterRegularDiscount =
+	            Math.max(0, originalAmount - regularDiscount);
+
+	    if (amountAfterRegularDiscount <= 0) {
+	        redirectAttributes.addFlashAttribute(
+	                "couponMessage", "There is no payable amount for this coupon.");
+
+	        return "redirect:/orders";
+	    }
+
+	    // Prevent the coupon from being applied a second time.
+	    Boolean couponUsed = (Boolean) session.getAttribute("couponUsed");
+
+	    if (Boolean.TRUE.equals(couponUsed)) {
+	        redirectAttributes.addFlashAttribute(
+	                "couponMessage", "Coupon already applied.");
+
+	        return "redirect:/orders";
+	    }
+
+	    double couponDiscount;
+
+	    if (amountAfterRegularDiscount < 100) {
+	        couponDiscount = amountAfterRegularDiscount * 0.02;
+	    } else if (amountAfterRegularDiscount < 1000) {
+	        couponDiscount = amountAfterRegularDiscount * 0.10;
+	    } else if (amountAfterRegularDiscount < 2500) {
+	        couponDiscount = amountAfterRegularDiscount * 0.30;
+	    } else {
+	        couponDiscount = amountAfterRegularDiscount * 0.50;
+	    }
+
+	    session.setAttribute("couponDiscount", couponDiscount);
+	    session.setAttribute("couponUsed", true);
+
+	    redirectAttributes.addFlashAttribute(
+	            "couponMessage",
+	            "Coupon applied successfully! Discount: ₹"
+	                    + String.format("%.2f", couponDiscount));
+
+	    return "redirect:/orders";
 	}
-
+	
 	// The list of payment options actually offered on orders.html.
 	private static final List<String> SUPPORTED_PAYMENT_MODES = List.of("phonepe", "gpay", "paytm", "anyupi", "debit",
 			"credit", "cod", "upi", "card");
@@ -685,21 +726,39 @@ public int getCartCount(HttpSession session) {
 
 		// Persist the items that were actually ordered, then clear the cart/coupon
 		// state so the next visit starts fresh.
-		String orderGroupId = "FC" + System.currentTimeMillis();
-		LocalDateTime now = LocalDateTime.now();
-		StringBuilder itemLines = new StringBuilder();
-		for (Cart item : cartItems) {
-			Orders order = new Orders(item.getName(), item.getQuantity(), item.getPrice());
-			order.setOrderGroupId(orderGroupId);
-			order.setCustomerName(username);
-			order.setPaymentMode(paymentMode);
-			order.setPaymentReference(paymentReference);
-			order.setPaymentVerified(paymentVerified);
-			order.setOrderTime(now);
-			orderRepository.save(order);
-			itemLines.append("- ").append(item.getName()).append(" x").append(item.getQuantity()).append(" (₹")
-					.append(item.getPrice()).append(")\n");
-		}
+
+String orderGroupId = "FC" + System.currentTimeMillis();
+LocalDateTime now = LocalDateTime.now();
+StringBuilder itemLines = new StringBuilder();
+
+List<Orders> ordersToSave = new java.util.ArrayList<>();
+
+for (Cart item : cartItems) {
+    Orders order = new Orders(
+        item.getName(),
+        item.getQuantity(),
+        item.getPrice()
+    );
+
+    order.setOrderGroupId(orderGroupId);
+    order.setCustomerName(username);
+    order.setPaymentMode(paymentMode);
+    order.setPaymentReference(paymentReference);
+    order.setPaymentVerified(paymentVerified);
+    order.setOrderTime(now);
+
+    ordersToSave.add(order);
+
+    itemLines.append("- ")
+        .append(item.getName())
+        .append(" x")
+        .append(item.getQuantity())
+        .append(" (₹")
+        .append(item.getPrice())
+        .append(")\n");
+}
+
+orderRepository.saveAll(ordersToSave);
 		session.removeAttribute("cart");
 		session.removeAttribute("originalAmount");
 		session.removeAttribute("discountAmount");
