@@ -814,6 +814,13 @@ public int getCartCount(HttpSession session) {
 
 		String mode = paymentMode == null ? "" : paymentMode.toLowerCase();
 
+		// State and district are compulsory - the order page enforces it, and this stops a skipped
+		// browser check (or a direct POST) from placing an order we cannot deliver.
+		if (state == null || state.isBlank() || district == null || district.isBlank()) {
+			redirectAttributes.addFlashAttribute("error", "Please select your State and District to place the order.");
+			return "redirect:/orders";
+		}
+
 		if (!SUPPORTED_PAYMENT_MODES.contains(mode)) {
 			redirectAttributes.addFlashAttribute("error", "Please select a valid payment method.");
 			return "redirect:/orders";
