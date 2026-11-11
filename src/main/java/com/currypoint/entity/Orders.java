@@ -35,6 +35,9 @@ public class Orders {
 	    private String paymentReference; // UTR for UPI, last-4 for cards, "COD" for cash
 	    private boolean paymentVerified; // true immediately for COD; false until you confirm UPI/card orders
 	    private LocalDateTime orderTime;
+	    // Final amount for the WHOLE checkout (after bill discount + coupon). Stored on every row of the
+	    // same order group. Null on orders placed before this column existed.
+	    private Double amountPaid;
 
 	    public Orders() {}
 
@@ -106,6 +109,13 @@ public class Orders {
 		}
 		public void setOrderTime(LocalDateTime orderTime) {
 			this.orderTime = orderTime;
+		}
+
+		public Double getAmountPaid() {
+			return amountPaid;
+		}
+		public void setAmountPaid(Double amountPaid) {
+			this.amountPaid = amountPaid;
 		}
 	    
 

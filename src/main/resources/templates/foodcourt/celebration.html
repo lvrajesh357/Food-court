@@ -10,7 +10,8 @@
     margin: 0;
     padding: 0;
     height: 100%;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;   /* short phones / landscape: let the content scroll instead of being cut off */
     background: linear-gradient(-45deg, #2b0a3d, #4a0f5c, #6b0f3a, #2b0a3d);
     background-size: 400% 400%;
     animation: gradientShift 8s ease infinite;
@@ -56,7 +57,9 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    height: 100vh;
+    min-height: 100vh;
+    min-height: 100dvh;  /* phones: 100vh is taller than the visible area (address bar) */
+    box-sizing: border-box;
     text-align: center;
     padding: 1rem;
   }
@@ -143,10 +146,10 @@
   <div class="celebration-title">Order Placed Successfully!</div>
   <div class="celebration-sub">
     Thank you, <span th:text="${username}">Customer</span>! Your order of
-    ₹<span th:text="${amount}">0.00</span> is confirmed.
+    ₹<span th:text="${#numbers.formatDecimal(amount, 1, 'NONE', 2, 'POINT')}">0.00</span> is confirmed.
   </div>
   <div class="celebration-countdown">
-    Redirecting to your delivery status in <span id="countdown">10</span> seconds...
+    Redirecting to your delivery status in <span id="countdown">6</span> seconds...
   </div>
   <div class="celebration-skip">
     <a th:href="@{/delivery}" class="btn btn-light btn-sm">Skip &amp; view delivery status now</a>
@@ -272,8 +275,8 @@
   }
   draw();
 
-  // ---- 10 second countdown, then auto-redirect to the delivery page ----
-  let secondsLeft = 10;
+  // ---- 6 second countdown, then auto-redirect to the delivery page ----
+  let secondsLeft = 6;
   const countdownEl = document.getElementById('countdown');
   const timerId = setInterval(() => {
     secondsLeft -= 1;

@@ -13,4 +13,6 @@ WORKDIR /app
 COPY --from=build /app/target/*.jar app.jar
 # Railway injects PORT at runtime; application.properties already reads it.
 EXPOSE 8989
-ENTRYPOINT ["java", "-jar", "app.jar"]
+# Small-instance tuning (Render free = 512 MB RAM, shared CPU): SerialGC + C1-only JIT start much faster
+# and use far less memory; MaxRAMPercentage leaves headroom so the container is not killed (OOM).
+ENTRYPOINT ["java", "-XX:+UseSerialGC", "-XX:MaxRAMPercentage=75", "-XX:TieredStopAtLevel=1", "-jar", "app.jar"]

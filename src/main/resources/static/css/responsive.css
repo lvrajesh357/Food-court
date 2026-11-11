@@ -1,0 +1,72 @@
+/* ==========================================================================
+   Shared phone / tablet layout.
+   Loaded AFTER each page's own stylesheet (home + the 5 menu pages + cart),
+   so it only overrides what breaks on small screens. Desktop is unchanged.
+   Problem it fixes: the top menu bar was one non-wrapping row (~700px wide)
+   centred on the screen, so on a phone "Veg Items", "Cart", "Logout" were
+   pushed off the left edge and could not even be scrolled to.
+   ========================================================================== */
+
+html { -webkit-text-size-adjust: 100%; }
+
+/* ---------- tablets & phones ---------- */
+@media (max-width: 900px) {
+  img { max-width: 100%; }
+  nav { padding: 6px 0; }
+
+  /* let the menu wrap onto a second line instead of running off-screen */
+  nav ul {
+    flex-wrap: wrap;
+    height: auto;
+    padding: 4px 6px;
+    row-gap: 2px;
+  }
+  nav ul li {
+    height: auto;
+    margin: 0 3px;
+  }
+  nav ul li a {
+    display: block;
+    font-size: 15px;
+    padding: 9px 8px;          /* comfortable thumb target */
+    white-space: nowrap;
+  }
+  .logo {
+    width: 56px;
+    height: 42px;
+    margin-right: 6px;
+  }
+  .text {
+    margin-right: 6px;
+    font-size: 17px;
+  }
+
+  h2 { font-size: 1.3rem; padding: 0 10px; }
+
+  /* home page slideshow: the fixed 560px height crops badly on a phone */
+  .slideshow { height: 56vw; min-height: 220px; max-height: 560px; }
+  .footer .offer { font-size: 15px; padding: 0 10px; }
+  .footer .signature { font-size: 22px; }
+}
+
+/* ---------- phones ---------- */
+@media (max-width: 576px) {
+  /* menu cards: two per row instead of one narrow card with huge side gaps */
+  .container { margin: 8px auto; padding: 0 4px; }
+  .card {
+    width: calc(50% - 12px);
+    margin: 6px;
+  }
+  .veg1 { padding: 10px 8px; }
+  .veg1 img { height: 90px; }
+  .itemname { font-size: 14px; margin: 8px 0; }
+  .button { margin: 12px auto; }
+  .button button { font-size: 14px; padding: 8px 14px; }
+
+  nav ul li a { font-size: 14px; padding: 9px 7px; }
+}
+
+/* very small phones: keep cards readable */
+@media (max-width: 360px) {
+  .card { width: calc(100% - 12px); }
+}

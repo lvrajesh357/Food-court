@@ -1,4 +1,4 @@
-const CACHE_NAME = 'foodcourt-static-v2';
+const CACHE_NAME = 'foodcourt-static-v3';
 const STATIC_ASSETS = [
   '/css/theme-toggle.css',
   '/js/theme-toggle.js',
@@ -34,13 +34,32 @@ self.addEventListener('fetch', function (event) {
 
   const url = new URL(req.url);
 
-  // Static assets (css/js/images): cache-first for fast repeat loads.
-  if (url.pathname.startsWith('/css/') || url.pathname.startsWith('/js/') || url.pathname.startsWith('/images/')) {
+  // CSS / JS: serve the cached copy instantly, but ALWAYS refresh it in the background
+  // (stale-while-revalidate) so a new deploy reaches phones after one reload instead of never.
+  if (url.pathname.startsWith('/css/') || url.pathname.startsWith('/js/')) {
+    event.respondWith(
+      caches.open(CACHE_NAME).then(function (cache) {
+        return cache.match(req).then(function (cached) {
+          const network = fetch(req).then(function (res) {
+            if (res && res.ok) { cache.put(req, res.clone()); }   // never cache 404/500 pages
+            return res;
+          }).catch(function () { return cached; });
+          return cached || network;
+        });
+      })
+    );
+    return;
+  }
+
+  // Images rarely change: cache-first for fast repeat loads (successful responses only).
+  if (url.pathname.startsWith('/images/')) {
     event.respondWith(
       caches.match(req).then(function (cached) {
         return cached || fetch(req).then(function (res) {
-          const resClone = res.clone();
-          caches.open(CACHE_NAME).then(function (cache) { cache.put(req, resClone); });
+          if (res && res.ok) {
+            const resClone = res.clone();
+            caches.open(CACHE_NAME).then(function (cache) { cache.put(req, resClone); });
+          }
           return res;
         });
       })

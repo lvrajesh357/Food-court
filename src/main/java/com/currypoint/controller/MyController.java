@@ -288,9 +288,6 @@ public class MyController {
 		List<MenuItems> vegItems = menurep.findByCategoryIgnoreCase("veg");
 		model.addAttribute("menuItems", vegItems);
 
-		List<Orders> orders = orderRepository.findAll();
-		model.addAttribute("orders", orders);
-
 		String name = (String) session.getAttribute("username");
 		if (name != null) {
 			model.addAttribute("username", name);
@@ -302,9 +299,6 @@ public class MyController {
 	public String NonVegCurrys(HttpSession session, Model model) {
 		List<MenuItems> nonvegItems = menurep.findByCategoryIgnoreCase("Non-veg");
 		model.addAttribute("menuItems", nonvegItems);
-
-		List<Orders> orders = orderRepository.findAll();
-		model.addAttribute("orders", orders);
 
 		String name = (String) session.getAttribute("username");
 		if (name != null) {
@@ -319,9 +313,6 @@ public class MyController {
 		List<Snacks> stators = snacksrep.findByCategoryIgnoreCase("snacks");
 		model.addAttribute("Snacks", stators);
 
-		List<Orders> orders = orderRepository.findAll();
-		model.addAttribute("orders", orders);
-
 		String name = (String) session.getAttribute("username");
 		if (name != null) {
 			model.addAttribute("username", name);
@@ -334,9 +325,6 @@ public class MyController {
 	public String vegBiryani(HttpSession session, Model model) {
 		List<SpecialItems> vegbiryani = specialrep.findByCategory("veg-biryani");
 
-		List<Orders> orders = orderRepository.findAll();
-		model.addAttribute("orders", orders);
-
 		model.addAttribute("menuItems", vegbiryani);
 		String name = (String) session.getAttribute("username");
 		if (name != null) {
@@ -348,9 +336,6 @@ public class MyController {
 	@GetMapping("/non-veg-biryanis")
 	public String nonvegbiryanis(HttpSession session, Model model) {
 		List<SpecialItems> nonvegbiryani = specialrep.findByCategory("non-veg-biryani");
-
-		List<Orders> orders = orderRepository.findAll();
-		model.addAttribute("orders", orders);
 
 		model.addAttribute("menuItems", nonvegbiryani);
 		String name = (String) session.getAttribute("username");
@@ -373,12 +358,26 @@ public String viewCart(HttpSession session, Model model) {
         discount = 0.0;
     }
 
-    double total = originalTotal - discount;
+    double total = round2(originalTotal - discount);
+
+    Integer discountPercentObj = (Integer) session.getAttribute("discountPercent");
+    int discountPercent = discountPercentObj != null ? discountPercentObj : 0;
+
+    // "Add Rs X more to get Y% off" nudge, only while a higher slab exists.
+    String nextSlabMessage = null;
+    int[] nextSlab = CartServiceImp.nextBillDiscountSlab(originalTotal);
+    if (nextSlab != null && originalTotal > 0) {
+        nextSlabMessage = "Add ₹" + money(nextSlab[0] - originalTotal) + " more to get " + nextSlab[1]
+                + "% off your bill!";
+    }
 
     model.addAttribute("cartItems", cartItems);
     model.addAttribute("orginaltotalAmount", originalTotal);
     model.addAttribute("totalAmount", total);
     model.addAttribute("discount", discount);
+    model.addAttribute("discountPercent", discountPercent);
+    model.addAttribute("discountReason", billDiscountReason(discountPercent));
+    model.addAttribute("nextSlabMessage", nextSlabMessage);
 
     return "cart";
 }
@@ -391,14 +390,16 @@ public int getCartCount(HttpSession session) {
 
 	@PostMapping("/cart/add-to-session")
 	@ResponseBody
-	public String addToCart(@RequestBody Cart request, HttpSession session) {
-		System.out.println("Received item: " + request.getName());
-		System.out.println("Category: " + request.getCategory()); // ✅ log category
-		System.out.println("Price: " + request.getPrice());
+	public ResponseEntity<String> addToCart(@RequestBody Cart request, HttpSession session) {
+		// Basic sanity checks - a negative/zero quantity or price would corrupt the bill.
+		if (request.getName() == null || request.getName().isBlank() || request.getQuantity() < 1
+				|| request.getQuantity() > 100 || request.getPrice() <= 0) {
+			return ResponseEntity.badRequest().body("Invalid item.");
+		}
 
 		cartimp.addItemToSessionCart(session, request.getName(), request.getQuantity(), request.getCategory(),
 				request.getPrice());
-		return "Item added successfully!";
+		return ResponseEntity.ok("Item added successfully!");
 	}
 
 	@PostMapping("/cart/remove-by-name")
@@ -516,36 +517,48 @@ public int getCartCount(HttpSession session) {
 		model.addAttribute("username", name);
 		model.addAttribute("ownerUpi", ownerUpi);
 
-		double originalAmount = session.getAttribute("originalAmount") != null
-				? (double) session.getAttribute("originalAmount")
-				: 0.0;
+		// Always recompute from the live cart, so the totals can never be stale
+		// (previously they were only refreshed when the cart page had been opened).
+		double originalAmount = cartService.calculateCartTotal(session);
 
 		double discountAmount = session.getAttribute("discountAmount") != null
 				? (double) session.getAttribute("discountAmount")
 				: 0.0;
 
-		// Only apply coupon if marked as used and valid
+		// The coupon is applied on the order page itself; if it was applied through the
+		// server endpoint, keep it in step with the CURRENT cart (it must follow the new total).
 		Boolean couponUsed = session.getAttribute("couponUsed") != null ? (Boolean) session.getAttribute("couponUsed")
 				: false;
 
 		double couponDiscount = 0.0;
 		if (couponUsed != null && couponUsed) {
-			couponDiscount = session.getAttribute("couponDiscount") != null
-					? (double) session.getAttribute("couponDiscount")
-					: 0.0;
+			couponDiscount = couponDiscountFor(Math.max(0, round2(originalAmount - discountAmount)));
+			session.setAttribute("couponDiscount", couponDiscount);
 			model.addAttribute("couponMessage", "Coupon already applied.");
 		} else {
-			couponDiscount = 0.0;
 			session.setAttribute("couponDiscount", 0.0); // Ensure zero if not applied
 		}
 
-		double finalAmount = Math.max(0, originalAmount - discountAmount - couponDiscount);
+		double finalAmount = Math.max(0, round2(originalAmount - discountAmount - couponDiscount));
 
 		model.addAttribute("totalAmount", originalAmount);
 		model.addAttribute("discount", discountAmount);
 		model.addAttribute("coupon", couponDiscount);
 		model.addAttribute("couponUsed", couponUsed);
 		model.addAttribute("finaltotalAmount", finalAmount);
+
+		// Explanations shown next to each amount on the order page.
+		Integer billPercentObj = (Integer) session.getAttribute("discountPercent");
+		int billPercent = billPercentObj != null ? billPercentObj : 0;
+		model.addAttribute("billReason", billDiscountReason(billPercent));
+		model.addAttribute("couponReason", couponUsed
+				? "Coupon COUPON applied - " + Math.round(couponRateFor(Math.max(0, round2(originalAmount - discountAmount))) * 100)
+						+ "% off"
+				: "No coupon applied");
+
+		// Pre-fill the confirmation e-mail with the address the customer logged in with (OTP login),
+		// so they still get their mail even if they skip the e-mail box.
+		model.addAttribute("userEmail", (String) session.getAttribute("userEmail"));
 
 		return "orders";
 	}
@@ -597,17 +610,7 @@ public int getCartCount(HttpSession session) {
 	        return "redirect:/orders";
 	    }
 
-	    double couponDiscount;
-
-	    if (amountAfterRegularDiscount < 100) {
-	        couponDiscount = amountAfterRegularDiscount * 0.02;
-	    } else if (amountAfterRegularDiscount < 1000) {
-	        couponDiscount = amountAfterRegularDiscount * 0.10;
-	    } else if (amountAfterRegularDiscount < 2500) {
-	        couponDiscount = amountAfterRegularDiscount * 0.30;
-	    } else {
-	        couponDiscount = amountAfterRegularDiscount * 0.50;
-	    }
+	    double couponDiscount = couponDiscountFor(amountAfterRegularDiscount);
 
 	    session.setAttribute("couponDiscount", couponDiscount);
 	    session.setAttribute("couponUsed", true);
@@ -675,7 +678,7 @@ public int getCartCount(HttpSession session) {
 		int month = Integer.parseInt(cleanExpiry.substring(0, 2));
 		int year = 2000 + Integer.parseInt(cleanExpiry.substring(2, 4));
 		java.time.YearMonth cardExpiry = java.time.YearMonth.of(year, month);
-		if (cardExpiry.isBefore(java.time.YearMonth.now())) {
+		if (cardExpiry.isBefore(java.time.YearMonth.now(IST))) {
 			return false;
 		}
 
@@ -713,8 +716,82 @@ public int getCartCount(HttpSession session) {
 		return digits.isEmpty() ? trimmed : "+" + digits;
 	}
 
+	// ---- Money / time helpers ------------------------------------------------
+	// Cloud servers (Render, Railway...) run on UTC. The shop works on Indian time,
+	// so every time shown to the customer/owner is calculated explicitly in IST.
+	private static final java.time.ZoneId IST = java.time.ZoneId.of("Asia/Kolkata");
+
+	/** Rounds a money value to 2 decimals (paise) so 119.99999999999999 never reaches the screen or an email. */
+	private static double round2(double value) {
+		return java.math.BigDecimal.valueOf(value).setScale(2, java.math.RoundingMode.HALF_UP).doubleValue();
+	}
+
+	/** 450 -> "450.00" (always a dot, whatever the server language). */
+	private static String money(double value) {
+		return String.format(java.util.Locale.ENGLISH, "%.2f", value);
+	}
+
+	/**
+	 * Coupon slabs - identical to the ones shown on the order page. The coupon is worked out on
+	 * the amount AFTER the regular bill discount has been taken off.
+	 */
+	private static double couponDiscountFor(double amountAfterRegularDiscount) {
+		return round2(amountAfterRegularDiscount * couponRateFor(amountAfterRegularDiscount));
+	}
+
+	/** Coupon rate for the slab the amount falls in (0.02 / 0.10 / 0.30 / 0.50). */
+	private static double couponRateFor(double amountAfterRegularDiscount) {
+		if (amountAfterRegularDiscount < 100) {
+			return 0.02;
+		} else if (amountAfterRegularDiscount < 1000) {
+			return 0.10;
+		} else if (amountAfterRegularDiscount < 2500) {
+			return 0.30;
+		}
+		return 0.50;
+	}
+
+	/** Plain-words reason for the bill discount, shown on the cart, the order page and in the mails. */
+	private static String billDiscountReason(int percent) {
+		if (percent > 0) {
+			return percent + "% bill discount (orders of ₹" + CartServiceImp.billDiscountThreshold(percent) + " or more)";
+		}
+		return "No bill discount yet (orders of ₹1000 or more get 10% off)";
+	}
+
+	/**
+	 * The bill, line by line - used for the customer mail, the owner mail and the delivery page so all
+	 * three always show the same numbers: items total, every discount and why, delivery, final amount,
+	 * and how much is paid online vs. to be paid in cash on delivery.
+	 */
+	private static String buildBillBreakdown(double subtotal, double billDiscount, int billPercent,
+			double couponDiscount, int couponPercent, double amount, boolean cashOnDelivery) {
+		double totalSaved = round2(billDiscount + couponDiscount);
+		StringBuilder b = new StringBuilder();
+		b.append("BILL DETAILS\n");
+		b.append("Items Total (Subtotal): ₹").append(money(subtotal)).append("\n");
+		b.append("Bill Discount: -₹").append(money(billDiscount)).append("  (")
+				.append(billDiscountReason(billPercent)).append(")\n");
+		if (couponDiscount > 0) {
+			b.append("Coupon Discount: -₹").append(money(couponDiscount)).append("  (coupon COUPON - ")
+					.append(couponPercent).append("% off after bill discount)\n");
+		} else {
+			b.append("Coupon Discount: -₹0.00  (no coupon used)\n");
+		}
+		b.append("Total Discount (You Saved): ₹").append(money(totalSaved)).append("\n");
+		b.append("Delivery Charges: FREE (₹0.00)\n");
+		// Plain-text mail cannot be bold, so the final amount gets its own banner to stand out.
+		b.append("\n===================================\n");
+		b.append("💰 FINAL AMOUNT: ₹").append(money(amount)).append("\n");
+		b.append("===================================\n\n");
+		b.append("Paid Online: ₹").append(money(cashOnDelivery ? 0.0 : amount)).append("\n");
+		b.append("To Pay on Delivery (Cash): ₹").append(money(cashOnDelivery ? amount : 0.0)).append("\n");
+		return b.toString();
+	}
+
 	@PostMapping("/payment/confirm")
-	public String confirmPayment(@RequestParam String paymentMode, @RequestParam double amount,
+	public String confirmPayment(@RequestParam(value = "amount", required = false) Double clientAmount,
+			@RequestParam String paymentMode,
 			@RequestParam String username, @RequestParam(required = false) String email,
 			@RequestParam(required = false) String customerNumber,
 			@RequestParam(required = false) String addressLine, @RequestParam(required = false) String landmark,
@@ -726,6 +803,7 @@ public int getCartCount(HttpSession session) {
 			@RequestParam(required = false) String creditCardNumber, @RequestParam(required = false) String creditCardName,
 			@RequestParam(required = false) String creditExpiry, @RequestParam(required = false) String creditCvv,
 			@RequestParam(required = false) String upiTransactionId,
+			@RequestParam(required = false) String couponCode,
 			HttpSession session, Model model, RedirectAttributes redirectAttributes) {
 
 		// Twilio requires full country-code (E.164) format like +919876543210.
@@ -763,8 +841,34 @@ public int getCartCount(HttpSession session) {
 		}
 		// "cod" needs no verification - money changes hands at the door.
 
-		// All mode-specific verification above passed (or the redirect above
-		// already fired), so the order can proceed.
+		// Never place an order for an empty cart (e.g. a stale/duplicate form
+		// submission after items were already removed).
+		List<Cart> cartItems = cartimp.getCartFromSession(session);
+		if (cartItems == null || cartItems.isEmpty()) {
+			redirectAttributes.addFlashAttribute("error", "Your cart is empty. Please add items before placing an order.");
+			return "redirect:/orders";
+		}
+
+		// ---- The amount is ALWAYS worked out here on the server from the cart. ----
+		// The amount posted by the browser is never trusted (a hidden form field can be edited).
+		//   subtotal - bill discount = amount after bill discount
+		//   amount after bill discount - coupon (only if the coupon was applied) = total payable
+		double originalTotal = cartimp.calculateCartTotal(session);
+		Double regularDiscountObj = (Double) session.getAttribute("discountAmount");
+		double regularDiscount = regularDiscountObj != null ? regularDiscountObj : 0.0;
+		double afterRegularDiscount = Math.max(0, round2(originalTotal - regularDiscount));
+		Integer billPercentObj = (Integer) session.getAttribute("discountPercent");
+		int billPercent = billPercentObj != null ? billPercentObj : 0;
+
+		boolean couponApplied = (couponCode != null && "coupon".equalsIgnoreCase(couponCode.trim()))
+				|| Boolean.TRUE.equals(session.getAttribute("couponUsed"));
+		double couponDiscount = couponApplied ? couponDiscountFor(afterRegularDiscount) : 0.0;
+		double amount = Math.max(0, round2(afterRegularDiscount - couponDiscount));
+
+		if (clientAmount != null && Math.abs(clientAmount - amount) > 0.01) {
+			System.out.println("[ORDER] Amount sent by the browser (" + clientAmount + ") differs from the server amount ("
+					+ amount + "). Using the server amount.");
+		}
 
 		// Payment reference detail, so you (the owner) have an audit trail to
 		// cross-check against your bank/UPI statement before delivering. COD
@@ -782,56 +886,43 @@ public int getCartCount(HttpSession session) {
 			paymentReference = "UPI Transaction ID: " + upiTransactionId;
 			paymentVerified = false;
 		} else {
-			paymentReference = "Cash on Delivery - collect ₹" + amount + " at the door";
+			paymentReference = "Cash on Delivery - collect ₹" + money(amount) + " at the door";
 			paymentVerified = true;
-		}
-
-		// Never place an order for an empty cart (e.g. a stale/duplicate form
-		// submission after items were already removed).
-		List<Cart> cartItems = cartimp.getCartFromSession(session);
-		if (cartItems == null || cartItems.isEmpty()) {
-			redirectAttributes.addFlashAttribute("error", "Your cart is empty. Please add items before placing an order.");
-			return "redirect:/orders";
 		}
 
 		// Persist the items that were actually ordered, then clear the cart/coupon
 		// state so the next visit starts fresh.
+		String orderGroupId = "FC" + System.currentTimeMillis();
+		LocalDateTime now = LocalDateTime.now(IST);
+		StringBuilder itemLines = new StringBuilder();
+		List<Orders> ordersToSave = new java.util.ArrayList<>();
+		int totalQuantity = 0;
 
-String orderGroupId = "FC" + System.currentTimeMillis();
-LocalDateTime now = LocalDateTime.now();
-StringBuilder itemLines = new StringBuilder();
+		for (Cart item : cartItems) {
+			Orders order = new Orders(item.getName(), item.getQuantity(), item.getPrice());
 
-List<Orders> ordersToSave = new java.util.ArrayList<>();
+			order.setOrderGroupId(orderGroupId);
+			order.setCustomerName(username);
+			order.setPaymentMode(paymentMode);
+			order.setPaymentReference(paymentReference);
+			order.setPaymentVerified(paymentVerified);
+			order.setOrderTime(now);
+			order.setAmountPaid(amount);
 
-for (Cart item : cartItems) {
-    Orders order = new Orders(
-        item.getName(),
-        item.getQuantity(),
-        item.getPrice()
-    );
+			ordersToSave.add(order);
+			totalQuantity += Math.max(item.getQuantity(), 0);
 
-    order.setOrderGroupId(orderGroupId);
-    order.setCustomerName(username);
-    order.setPaymentMode(paymentMode);
-    order.setPaymentReference(paymentReference);
-    order.setPaymentVerified(paymentVerified);
-    order.setOrderTime(now);
+			itemLines.append("- ").append(item.getName()).append(" x").append(item.getQuantity())
+					.append(" @ ₹").append(money(item.getPrice()))
+					.append(" = ₹").append(money(round2(item.getPrice() * item.getQuantity()))).append("\n");
+		}
 
-    ordersToSave.add(order);
+		orderRepository.saveAll(ordersToSave);
 
-    itemLines.append("- ")
-        .append(item.getName())
-        .append(" x")
-        .append(item.getQuantity())
-        .append(" (₹")
-        .append(item.getPrice())
-        .append(")\n");
-}
-
-orderRepository.saveAll(ordersToSave);
 		session.removeAttribute("cart");
 		session.removeAttribute("originalAmount");
 		session.removeAttribute("discountAmount");
+		session.removeAttribute("discountPercent");
 		session.removeAttribute("couponDiscount");
 		session.removeAttribute("couponUsed");
 
@@ -844,15 +935,34 @@ orderRepository.saveAll(ordersToSave);
 		String paymentVerification = paymentReference
 				+ (paymentVerified ? "" : " — ⏳ Awaiting your manual verification (see /owner/orders)");
 
+		// Bill breakdown - the same numbers the customer saw on the order page (with the reason for
+		// every discount, the delivery charge, and how much is paid online vs. on delivery).
+		int couponPercent = couponDiscount > 0 ? (int) Math.round(couponRateFor(afterRegularDiscount) * 100) : 0;
+		String billLines = buildBillBreakdown(originalTotal, regularDiscount, billPercent, couponDiscount,
+				couponPercent, amount, mode.equals("cod"));
+
+		// Delivery estimate: ~15 min in the kitchen for the first item, +2 min for every extra
+		// item (max +15), plus ~15 min on the road - rounded to the nearest 5 minutes (30-45 min).
+		int prepMinutes = 15 + Math.min(15, Math.max(0, totalQuantity - 1) * 2);
+		int etaMinutes = ((prepMinutes + 15 + 2) / 5) * 5;
+		java.util.Locale english = java.util.Locale.ENGLISH;
+		String orderTimeStr = now.format(DateTimeFormatter.ofPattern("dd MMM yyyy, hh:mm a", english));
+		String etaTimeStr = now.plusMinutes(etaMinutes).format(DateTimeFormatter.ofPattern("hh:mm a", english));
+
 		String subject = "Your FoodCourt Order Has Been Placed! 🎉";
-		String message = "Hi " + username + ",\n\n" + "Your order has been placed successfully!\n\n" + "Order Summary:\n"
-				+ itemLines + "\nTotal Paid: ₹" + amount + "\nPayment Mode: " + paymentMode
+		String message = "Hi " + username + ",\n\n" + "Your order has been placed successfully!\n\n"
+				+ "Order ID: " + orderGroupId + "\nOrder Time: " + orderTimeStr + "\n\n"
+				+ "Order Summary:\n" + itemLines + "\n" + billLines
+				+ "\nPayment Mode: " + paymentMode
 				+ "\nPayment Verification: " + paymentVerification
 				+ "\nDelivery Address: " + fullAddress + "\nContact Number: " + (customerNumber != null ? customerNumber : "Not provided")
-				+ "\n\n" + "Your order will be delivered soon 🚚\n\n" + "Thank you for ordering with FoodCourt!";
+				+ "\n\n" + "Estimated delivery: about " + etaMinutes + " minutes (around " + etaTimeStr + ") 🚚\n\n"
+				+ "Thank you for ordering with FoodCourt!";
 
-		if (email != null && !email.isEmpty()) {
-			emailService.sendMail(email, subject, message);
+		// Mails are sent on a background thread (EmailServiceimp is @Async), so the customer
+		// goes straight to the celebration page without waiting for the mail server.
+		if (email != null && !email.isBlank()) {
+			emailService.sendMail(email.trim(), subject, message);
 		}
 
 		// Notify the owner by email. Customer number is kept on the order purely
@@ -861,9 +971,11 @@ orderRepository.saveAll(ordersToSave);
 		String customerMobile = (customerNumber != null && !customerNumber.isBlank()) ? customerNumber
 				: "Not provided";
 
-		String ownerAlertFull = "🔔 New FoodCourt Order\n\n" + "Order ID: " + orderGroupId + "\nCustomer: " + username
+		String ownerAlertFull = "🔔 New FoodCourt Order\n\n" + "Order ID: " + orderGroupId + "\nOrder Time: " + orderTimeStr
+				+ "\nCustomer: " + username
 				+ "\nMobile: " + customerMobile
-				+ "\n\nItems:\n" + itemLines + "\nTotal Amount: ₹" + amount + "\nPayment Mode: " + paymentMode
+				+ "\nCustomer Email: " + (email != null && !email.isBlank() ? email.trim() : "Not provided")
+				+ "\n\nItems:\n" + itemLines + "\n" + billLines + "\nPayment Mode: " + paymentMode
 				+ "\nPayment Verification: " + paymentVerification
 				+ "\n\nDelivery Address:\n" + fullAddress
 				+ (paymentVerified ? "\n\nPlease prepare and deliver this order."
@@ -871,11 +983,8 @@ orderRepository.saveAll(ordersToSave);
 
 		emailService.sendMail(ownerEmail, "New FoodCourt Order - " + username, ownerAlertFull);
 
-		String orderTimeStr = LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd MMM yyyy, hh:mm a"));
-		int etaMinutes = 5 + new java.util.Random().nextInt(11); // random 5-15 minutes
-
 		// Stash order details in the session so the /delivery page (reached via a
-		// plain browser redirect after the celebration screen's 10s countdown)
+		// plain browser redirect after the celebration screen's countdown)
 		// can still render them.
 		session.setAttribute("username", username);
 		session.setAttribute("order_amount", amount);
@@ -885,6 +994,7 @@ orderRepository.saveAll(ordersToSave);
 		session.setAttribute("order_time", orderTimeStr);
 		session.setAttribute("order_deliveryMessage", message);
 		session.setAttribute("order_eta", etaMinutes);
+		session.setAttribute("order_eta_time", etaTimeStr);
 
 		model.addAttribute("username", username);
 		model.addAttribute("amount", amount);
@@ -894,7 +1004,8 @@ orderRepository.saveAll(ordersToSave);
 		model.addAttribute("orderTime", orderTimeStr);
 		model.addAttribute("deliveryMessage", message);
 		model.addAttribute("etaMinutes", etaMinutes);
-		return "celebration"; // celebration.html -> auto-redirects to /delivery after 10s
+		model.addAttribute("etaTime", etaTimeStr);
+		return "celebration"; // celebration.html -> auto-redirects to /delivery after a short countdown
 	}
 
 	private void sendEmail(String customerEmail, String subject, String message) {
@@ -944,14 +1055,15 @@ orderRepository.saveAll(ordersToSave);
 		model.addAttribute("address", address);
 		model.addAttribute("orderTime", orderTime);
 		model.addAttribute("deliveryMessage", deliveryMessage);
-		model.addAttribute("etaMinutes", etaMinutes != null ? etaMinutes : 15);
+		model.addAttribute("etaMinutes", etaMinutes != null ? etaMinutes : 30);
+		model.addAttribute("etaTime", (String) session.getAttribute("order_eta_time"));
 
 		return "delivery";
 	}
 
 	@GetMapping("/owner/orders")
 	public String ownerOrders(@RequestParam(required = false) String code, Model model) {
-		if (code == null || !code.equals(ownerAccessCode)) {
+		if (ownerAccessCode == null || ownerAccessCode.isBlank() || code == null || !code.equals(ownerAccessCode)) {
 			model.addAttribute("accessDenied", true);
 			return "owner-orders";
 		}
@@ -968,7 +1080,7 @@ orderRepository.saveAll(ordersToSave);
 	@PostMapping("/owner/orders/verify")
 	public String verifyOrder(@RequestParam String code, @RequestParam String orderGroupId,
 			RedirectAttributes redirectAttributes) {
-		if (code == null || !code.equals(ownerAccessCode)) {
+		if (ownerAccessCode == null || ownerAccessCode.isBlank() || code == null || !code.equals(ownerAccessCode)) {
 			return "redirect:/owner/orders";
 		}
 
@@ -998,6 +1110,9 @@ orderRepository.saveAll(ordersToSave);
 				g.put("paymentMode", row.getPaymentMode());
 				g.put("paymentReference", row.getPaymentReference());
 				g.put("orderTime", row.getOrderTime());
+				g.put("orderTimeText", row.getOrderTime() == null ? ""
+						: row.getOrderTime().format(DateTimeFormatter.ofPattern("dd MMM yyyy, hh:mm a", java.util.Locale.ENGLISH)));
+				g.put("amountPaid", row.getAmountPaid());
 				g.put("items", new java.util.ArrayList<Orders>());
 				g.put("total", 0.0);
 				return g;
@@ -1006,6 +1121,15 @@ orderRepository.saveAll(ordersToSave);
 			List<Orders> items = (List<Orders>) group.get("items");
 			items.add(row);
 			group.put("total", (double) group.get("total") + row.getPrice() * row.getQuantity());
+			if (group.get("amountPaid") == null && row.getAmountPaid() != null) {
+				group.put("amountPaid", row.getAmountPaid());
+			}
+		}
+		// What the customer actually pays (after discount/coupon). Older orders have no stored
+		// amount, so fall back to the plain item total for those.
+		for (java.util.Map<String, Object> g : groups.values()) {
+			Object paid = g.get("amountPaid");
+			g.put("displayTotal", paid != null ? paid : round2((double) g.get("total")));
 		}
 		return new java.util.ArrayList<>(groups.values());
 	}

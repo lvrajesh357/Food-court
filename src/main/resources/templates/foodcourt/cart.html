@@ -15,6 +15,26 @@
     .payment-option { width: 100% !important; }
     .form-group input, .form-group select { width: 100% !important; box-sizing: border-box; }
   }
+
+  /* Phones: a 6-column table is ~570px wide and runs off the screen, so show each cart
+     row as a small card (label on the left, value on the right). */
+  @media (max-width: 576px) {
+    body { margin: 0.75rem; }
+    .button-row { padding: 8px 2px; }
+    h1 { margin-bottom: 1rem; }
+    table, thead, tbody, tfoot, tr, th, td { display: block; }
+    thead { position: absolute; left: -9999px; top: -9999px; }   /* labels come from data-label */
+    tbody tr { padding: 4px 0; border-bottom: 8px solid #f0f2f5; }
+    tbody td { display: flex; justify-content: space-between; align-items: center; gap: 1rem;
+               text-align: right; padding: 0.55rem 1rem; }
+    tbody td::before { content: attr(data-label); font-weight: 600; color: #555; text-align: left; }
+    tbody td:last-child { border-bottom: none; justify-content: center; }
+    tbody td:last-child::before { content: none; }
+    tfoot tr { display: flex; justify-content: space-between; border-top: 1px solid #e0e0e0; }
+    tfoot td { display: block; border-bottom: none; }
+    tfoot td:first-child { text-align: left !important; }
+    a.remove-link { display: inline-block; padding: 0.45rem 1.1rem; border: 1px solid #e74c3c; border-radius: 6px; }
+  }
 </style>
 <meta charset="UTF-8" />
 <title>Your Cart</title>
@@ -185,13 +205,9 @@ h5 button:hover {
 
 <script>
 function confirmRemoval(event, itemName) {
-	const cartRows = document.querySelectorAll("tbody tr");
-
-	if (cartRows.length === 0) {
-	    alert("Please select items to place your order.");
-	} else {
-	    window.location.href = "/orders";
-	}
+	// Nothing to do: the Remove link itself goes to /cart/remove/{sno}, which removes the
+	// item and comes straight back to the cart. (Forcing /orders here used to fight with it.)
+	return true;
 }
 	
 	
@@ -231,6 +247,7 @@ function confirmRemoval(event, itemName) {
 	}
 </script>
 <link rel="stylesheet" href="/css/theme-toggle.css">
+<link rel="stylesheet" th:href="@{/css/responsive.css}">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#ff6f61">
 <link rel="apple-touch-icon" href="/images/icon-192.png">
@@ -249,6 +266,7 @@ function confirmRemoval(event, itemName) {
 		</div>
 
 
+		<div class="table-responsive-wrap">
 		<table>
 			<thead>
 				<tr>
@@ -263,11 +281,11 @@ function confirmRemoval(event, itemName) {
 
 			<tbody>
 				<tr th:each="item : ${cartItems}">
-					<td th:text="${item.name}"></td>
-					<td th:text="${item.quantity}"></td>
-					<td th:text="${item.price}"></td>
-					<td th:text="${item.category}"></td>
-					<td th:text="${item.total}"></td>
+					<td data-label="Item" th:text="${item.name}"></td>
+					<td data-label="Quantity" th:text="${item.quantity}"></td>
+					<td data-label="Price (₹)" th:text="${#numbers.formatDecimal(item.price, 1, 'NONE', 2, 'POINT')}"></td>
+					<td data-label="Category" th:text="${item.category}"></td>
+					<td data-label="Total (₹)" th:text="${#numbers.formatDecimal(item.total, 1, 'NONE', 2, 'POINT')}"></td>
 					<td><a th:href="@{/cart/remove/{sno}(sno=${item.sno})}"
 						class="remove-link" th:attr="data-itemname=${item.name}"
 						onclick="confirmRemoval(event, this.getAttribute('data-itemname'))">
@@ -277,25 +295,34 @@ function confirmRemoval(event, itemName) {
 			</tbody>
                   <tfoot>
     <tr>
-        <td colspan="4" style="text-align: right; font-weight: bold;">
-            Original Total:
-        </td>
-        <td colspan="2"
-            th:text="${orginaltotalAmount}">
-            0.00
-        </td>
+        <td colspan="4" style="text-align: right; font-weight: bold;">Original Total (items):</td>
+        <td colspan="2" th:text="'₹' + ${#numbers.formatDecimal(orginaltotalAmount, 1, 'NONE', 2, 'POINT')}">₹0.00</td>
     </tr>
-
     <tr>
         <td colspan="4" style="text-align: right; font-weight: bold;">
-            Discount:
+            Bill Discount:<br>
+            <small style="font-weight: normal;" th:text="${discountReason}">Bill discount</small>
         </td>
-        <td colspan="2" th:text="${discount}">
-            0.00
-        </td>
+        <td colspan="2" style="color: #1e7e34; font-weight: bold;"
+            th:text="'- ₹' + ${#numbers.formatDecimal(discount, 1, 'NONE', 2, 'POINT')}">- ₹0.00</td>
+    </tr>
+    <tr>
+        <td colspan="4" style="text-align: right; font-weight: bold;">Delivery Charges:</td>
+        <td colspan="2" style="color: #1e7e34; font-weight: bold;">FREE (₹0.00)</td>
+    </tr>
+    <tr>
+        <td colspan="4" style="text-align: right; font-weight: bold;">🎉 You Save:</td>
+        <td colspan="2" style="color: #1e7e34; font-weight: bold;"
+            th:text="'₹' + ${#numbers.formatDecimal(discount, 1, 'NONE', 2, 'POINT')}">₹0.00</td>
+    </tr>
+    <tr>
+        <td colspan="4" style="text-align: right; font-weight: bold;">Total to Pay:</td>
+        <td colspan="2" style="font-weight: bold;"
+            th:text="'₹' + ${#numbers.formatDecimal(totalAmount, 1, 'NONE', 2, 'POINT')}">₹0.00</td>
     </tr>
 </tfoot>
 		</table>
+		</div>
 
 		<!--  
 		
@@ -315,8 +342,10 @@ function confirmRemoval(event, itemName) {
 -->
 		<section class="summary-section">
 			<h2>
-				Now your Total Balance is : <span th:text="${totalAmount}">0.00</span>
+				Now your Total Balance is : ₹<span th:text="${#numbers.formatDecimal(totalAmount, 1, 'NONE', 2, 'POINT')}">0.00</span>
 			</h2>
+			<p th:if="${nextSlabMessage != null}" style="font-weight: 600; color: #ff6f61;" th:text="'🎯 ' + ${nextSlabMessage}"></p>
+			<p style="font-size: 0.9rem;">🎟️ Have a coupon? Enter code <strong>COUPON</strong> on the next page for an extra discount (applied after the bill discount).</p>
 			<h5>
 				Placed on <span>
 					<button onclick="checkCartAndPlaceOrder()">Order</button>

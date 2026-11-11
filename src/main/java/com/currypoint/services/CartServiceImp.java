@@ -176,20 +176,53 @@ public class CartServiceImp implements CartService {
             }
         }
 
-        double discountAmount = 0.0;
+        // Same slabs as before (>=1000: 10%, >=1500: 15%, >=2000: 30%) - now in one place.
+        int discountPercent = billDiscountPercent(originalTotal);
+        double discountAmount = originalTotal * discountPercent / 100.0;
 
-        if (originalTotal >= 2000) {
-            discountAmount = originalTotal * 0.30;
-        } else if (originalTotal >= 1500) {
-            discountAmount = originalTotal * 0.15;
-        } else if (originalTotal >= 1000) {
-            discountAmount = originalTotal * 0.10;
-        }
+        // Round to paise so values like 119.99999999999999 never reach the screen/emails.
+        originalTotal = Math.round(originalTotal * 100.0) / 100.0;
+        discountAmount = Math.round(discountAmount * 100.0) / 100.0;
 
         session.setAttribute("originalAmount", originalTotal);
         session.setAttribute("discountAmount", discountAmount);
+        session.setAttribute("discountPercent", discountPercent);
 
         return originalTotal;
+    }
+
+    /** Bill discount % for a cart total: 2000+ -> 30, 1500+ -> 15, 1000+ -> 10, otherwise 0. */
+    public static int billDiscountPercent(double total) {
+        if (total >= 2000) {
+            return 30;
+        } else if (total >= 1500) {
+            return 15;
+        } else if (total >= 1000) {
+            return 10;
+        }
+        return 0;
+    }
+
+    /** The cart total at which the bill discount % starts (0 when there is no discount). */
+    public static int billDiscountThreshold(int percent) {
+        switch (percent) {
+            case 30: return 2000;
+            case 15: return 1500;
+            case 10: return 1000;
+            default: return 0;
+        }
+    }
+
+    /** Next bill-discount slab above this total as {threshold, percent}, or null when already at the top. */
+    public static int[] nextBillDiscountSlab(double total) {
+        if (total < 1000) {
+            return new int[] { 1000, 10 };
+        } else if (total < 1500) {
+            return new int[] { 1500, 15 };
+        } else if (total < 2000) {
+            return new int[] { 2000, 30 };
+        }
+        return null;
     }
 
 	
@@ -200,6 +233,10 @@ public class CartServiceImp implements CartService {
 	    session.removeAttribute("cartIdCounter");
 	    session.removeAttribute("originalAmount");
 	    session.removeAttribute("discountAmount");
+	    session.removeAttribute("discountPercent");
+	    // a coupon belongs to the cart it was applied on - never carry it to the next cart
+	    session.removeAttribute("couponUsed");
+	    session.removeAttribute("couponDiscount");
 	}
 
 

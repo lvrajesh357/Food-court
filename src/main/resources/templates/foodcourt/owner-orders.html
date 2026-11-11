@@ -57,17 +57,17 @@
           <strong th:text="${group.customerName}">Customer</strong>
           <div class="order-meta">
             Order: <span th:text="${group.orderGroupId}"></span> ·
-            <span th:text="${group.orderTime}"></span>
+            <span th:text="${group.orderTimeText}"></span>
           </div>
         </div>
         <div class="text-end">
-          <div><strong>₹<span th:text="${group.total}"></span></strong></div>
+          <div><strong>₹<span th:text="${#numbers.formatDecimal(group.displayTotal, 1, 'NONE', 2, 'POINT')}"></span></strong></div>
           <div class="order-meta" th:text="${group.paymentMode}"></div>
         </div>
       </div>
       <div class="mt-2"><strong>Payment reference:</strong> <span th:text="${group.paymentReference}"></span></div>
       <ul class="mb-2">
-        <li th:each="item : ${group.items}" th:text="${item.itemName} + ' x' + ${item.quantity} + ' (₹' + ${item.price} + ')'"></li>
+        <li th:each="item : ${group.items}" th:text="${item.itemName} + ' x' + ${item.quantity} + ' (₹' + ${#numbers.formatDecimal(item.price, 1, 'NONE', 2, 'POINT')} + ' each)'"></li>
       </ul>
       <form th:action="@{/owner/orders/verify}" method="post" class="d-inline">
         <input type="hidden" name="code" th:value="${code}">
@@ -84,11 +84,11 @@
           <strong th:text="${group.customerName}">Customer</strong>
           <div class="order-meta">
             Order: <span th:text="${group.orderGroupId}"></span> ·
-            <span th:text="${group.orderTime}"></span>
+            <span th:text="${group.orderTimeText}"></span>
           </div>
         </div>
         <div class="text-end">
-          <div><strong>₹<span th:text="${group.total}"></span></strong></div>
+          <div><strong>₹<span th:text="${#numbers.formatDecimal(group.displayTotal, 1, 'NONE', 2, 'POINT')}"></span></strong></div>
           <div class="order-meta" th:text="${group.paymentMode}"></div>
         </div>
       </div>

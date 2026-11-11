@@ -170,7 +170,7 @@
     <div class="delivery-body">
 
       <div class="amount-highlight">
-        <div class="amount-value">₹<span th:text="${amount}">0.00</span></div>
+        <div class="amount-value">₹<span th:text="${#numbers.formatDecimal(amount, 1, 'NONE', 2, 'POINT')}">0.00</span></div>
         <div class="amount-label">paid via <span th:text="${paymentMode}">N/A</span></div>
       </div>
 
@@ -193,7 +193,8 @@
       <div class="delivery-road-label">Your delivery van is on the road, heading your way...</div>
 
       <p class="text-center mt-2 mb-0" style="font-size:0.9rem; color:#555;">
-        🚚 Estimated delivery in: <strong><span th:text="${etaMinutes}">15</span> minutes</strong>
+        🚚 Estimated delivery in: <strong>about <span th:text="${etaMinutes}">30</span> minutes</strong>
+        <span th:if="${etaTime != null}">(around <strong th:text="${etaTime}">--</strong>)</span>
       </p>
 
       <pre class="delivery-message-box" th:text="${deliveryMessage}">Delivery details...</pre>
